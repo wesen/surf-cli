@@ -98,3 +98,17 @@ Implemented host-side core tool routing, provider/deferred rejection paths, stre
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress.go — Extended tool request parse output (id/tab/window metadata)
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/store.go — Pending metadata updated to preserve arbitrary original request IDs
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Runtime routing, stream/session behavior, and `tool_response` shaping
+
+## 2026-02-25 - Added Glazed CLI root + shared transport/format utilities (T3.1-T3.8)
+
+Implemented the initial `surf-go` Cobra+Glazed skeleton, including root help/logging wiring, a first raw tool command scaffold, shared socket transport client, request envelope helper, and response row formatting utility.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Root Cobra command with help/logging wiring and command registration
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_raw.go — Glazed command scaffold with output + command settings sections
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client.go — Shared socket transport utility
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/base.go — Shared tool_request envelope builder and execute helper
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format.go — Shared response-to-row formatter
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/go.mod — Added Glazed/Cobra dependencies
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/go.sum — Dependency lock entries

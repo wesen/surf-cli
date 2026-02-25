@@ -48,14 +48,14 @@
 
 ## Phase 3 - Glazed CLI Skeleton
 
-- [ ] T3.1: Create `surf-go` root Cobra command.
-- [ ] T3.2: Add Glazed output section via `settings.NewGlazedSchema()`.
-- [ ] T3.3: Add command settings section via `cli.NewCommandSettingsSection()`.
-- [ ] T3.4: Add logging section and `PersistentPreRunE` logger init.
-- [ ] T3.5: Implement shared transport client (socket connect/write/read/timeout).
-- [ ] T3.6: Implement base command helper for building `tool_request` envelopes.
-- [ ] T3.7: Implement shared response-to-row formatter utility.
-- [ ] T3.8: Add root help wiring with Glazed help system.
+- [x] T3.1: Create `surf-go` root Cobra command.
+- [x] T3.2: Add Glazed output section via `settings.NewGlazedSchema()`.
+- [x] T3.3: Add command settings section via `cli.NewCommandSettingsSection()`.
+- [x] T3.4: Add logging section and `PersistentPreRunE` logger init.
+- [x] T3.5: Implement shared transport client (socket connect/write/read/timeout).
+- [x] T3.6: Implement base command helper for building `tool_request` envelopes.
+- [x] T3.7: Implement shared response-to-row formatter utility.
+- [x] T3.8: Add root help wiring with Glazed help system.
 
 ## Phase 4 - Glazed Core Commands (Group by Group)
 

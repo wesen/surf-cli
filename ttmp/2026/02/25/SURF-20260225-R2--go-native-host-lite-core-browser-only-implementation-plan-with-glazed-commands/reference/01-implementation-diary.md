@@ -398,3 +398,49 @@ cd go && go test ./...
 6. Preserved passthrough flow for non-tool requests (`GET_AUTH`, `API_REQUEST`) through the pending correlation path with original IDs restored.
 7. `go test ./...` passed.
 8. `tasks.md` updated to mark `T2.4` through `T2.10` complete.
+
+## Phase 11 - Implemented Glazed CLI skeleton and transport utilities (T3.1-T3.8)
+
+### Skills applied
+
+1. `glazed-command-authoring` for command struct/section/wiring conventions.
+
+### Commands run
+
+```bash
+cd go && go mod tidy
+cd go && go test ./...
+cd go && go run ./cmd/surf-go --help
+```
+
+### Outputs created
+
+1. `go/internal/cli/transport/client.go`
+2. `go/internal/cli/transport/client_test.go`
+3. `go/internal/cli/commands/base.go`
+4. `go/internal/cli/commands/base_test.go`
+5. `go/internal/cli/commands/format.go`
+6. `go/internal/cli/commands/format_test.go`
+7. `go/internal/cli/commands/tool_raw.go`
+
+### Files modified
+
+1. `go/cmd/surf-go/main.go`
+2. `go/go.mod`
+3. `go/go.sum`
+
+### Results
+
+1. Added `surf-go` root command with:
+   - Glazed help-system wiring (`help.NewHelpSystem`, `help_cmd.SetupCobraRootCommand`),
+   - logging section and root logger init (`logging.AddLoggingSectionToRootCommand`, `logging.InitLoggerFromCobra`).
+2. Added first Glazed command (`tool-raw`) as a skeleton command surface:
+   - includes `settings.NewGlazedSchema()` output section,
+   - includes `cli.NewCommandSettingsSection()` command metadata/debug section,
+   - decodes settings via `vals.DecodeSectionInto(schema.DefaultSlug, settings)`.
+3. Implemented shared socket transport client utility with request timeout and one-response parsing.
+4. Implemented shared helper for constructing `tool_request` envelopes.
+5. Implemented shared response-to-row formatter utility for Glazed output.
+6. Added unit tests for base envelope builder, formatter extraction, and transport roundtrip.
+7. Full package tests pass and `surf-go --help` renders correctly.
+8. `tasks.md` updated to mark `T3.1` through `T3.8` complete.
