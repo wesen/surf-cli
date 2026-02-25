@@ -135,7 +135,25 @@ for (const c of cases) {
 }
 
 const reportPath = path.join(outputRoot, 'SUMMARY.md');
-let md = `# Node vs Go Output Comparison\n\n`;
+let md = `---\n`;
+md += `Title: Node vs Go Output Comparison\n`;
+md += `Ticket: SURF-20260225-R2\n`;
+md += `Status: active\n`;
+md += `Topics:\n`;
+md += `  - go\n`;
+md += `  - chromium\n`;
+md += `  - native-messaging\n`;
+md += `DocType: reference\n`;
+md += `Intent: working\n`;
+md += `Owners: []\n`;
+md += `RelatedFiles: []\n`;
+md += `ExternalSources: []\n`;
+md += `Summary: \"Generated comparison summary for node vs go cli outputs\"\n`;
+md += `LastUpdated: ${new Date().toISOString()}\n`;
+md += `WhatFor: \"Quick artifact summary for output-shape investigations\"\n`;
+md += `WhenToUse: \"Use when comparing node and go command output schemas\"\n`;
+md += `---\n\n`;
+md += `# Node vs Go Output Comparison\n\n`;
 md += `- Socket: \`${socketPath}\`\n`;
 md += `- Generated: ${new Date().toISOString()}\n\n`;
 md += `## Setup\n\n`;
