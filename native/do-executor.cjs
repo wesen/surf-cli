@@ -11,8 +11,9 @@
  */
 
 const net = require("net");
+const { getSocketPath } = require("./socket-path.cjs");
 
-const SOCKET_PATH = process.platform === "win32" ? "//./pipe/surf" : "/tmp/surf.sock";
+const SOCKET_PATH = getSocketPath();
 
 // Maximum iterations for loops (safety cap)
 const MAX_LOOP_ITERATIONS = 100;

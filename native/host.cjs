@@ -6,6 +6,7 @@ const os = require("os");
 const https = require("https");
 const { execSync } = require("child_process");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { getSocketPath } = require("./socket-path.cjs");
 const chatgptClient = require("./chatgpt-client.cjs");
 const geminiClient = require("./gemini-client.cjs");
 const perplexityClient = require("./perplexity-client.cjs");
@@ -16,7 +17,7 @@ const { mapToolToMessage, mapComputerAction, formatToolContent } = require("./ho
 
 const IS_WIN = process.platform === "win32";
 const SURF_TMP = IS_WIN ? path.join(os.tmpdir(), "surf") : "/tmp";
-const SOCKET_PATH = IS_WIN ? "//./pipe/surf" : "/tmp/surf.sock";
+const SOCKET_PATH = getSocketPath();
 if (IS_WIN) { try { fs.mkdirSync(SURF_TMP, { recursive: true }); } catch {} }
 
 // Cross-platform image resize (macOS: sips, Linux: ImageMagick)

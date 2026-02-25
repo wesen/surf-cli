@@ -538,6 +538,7 @@ surf workflow.validate ./my-workflow.json
 
 ```bash
 SURF_NETWORK_PATH         # Path for network capture logs (default: /tmp/surf)
+SURF_SOCKET_PATH          # Override Unix socket / named pipe path (default: /tmp/surf.sock on Linux/macOS)
 SURF_NODE_PATH            # Path to node binary (for native host wrapper)
 SURF_HOST_PATH            # Path to native/host.cjs (for native host wrapper)
 SURF_EXTENSION_PATH       # Path to extension dist/ directory
@@ -556,7 +557,7 @@ export SURF_EXTENSION_PATH=~/.local/share/surf-cli/extension
 
 ## Socket API
 
-For programmatic integration, send JSON to `/tmp/surf.sock`:
+For programmatic integration, send JSON to `/tmp/surf.sock` (or your `SURF_SOCKET_PATH` override):
 
 ```bash
 echo '{"type":"tool_request","method":"execute_tool","params":{"tool":"tab.list","args":{}},"id":"1"}' | nc -U /tmp/surf.sock

@@ -3,8 +3,9 @@ const net = require("net");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
+const { getSocketPath } = require("./socket-path.cjs");
 
-const SOCKET_PATH = process.platform === "win32" ? "//./pipe/surf" : "/tmp/surf.sock";
+const SOCKET_PATH = getSocketPath();
 const REQUEST_TIMEOUT = 30000;
 
 const TOOL_SCHEMAS = {
