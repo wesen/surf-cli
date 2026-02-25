@@ -65,3 +65,13 @@ Completed implementation Task 4: improved CLI diagnostics and README guidance fo
 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/cli.cjs — Added socket-path output and snap-specific hint on connection errors
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Added `SURF_SOCKET_PATH` usage guidance for Snap Chromium
+
+## 2026-02-25
+
+Task 5 reached real-browser validation checkpoint. Local syntax/tests/installer checks passed; awaiting user-driven Chromium verification to complete integration validation.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Verified dual-target install behavior locally
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/uninstall-native-host.cjs — Verified dual-target uninstall behavior locally
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/cli.cjs — Verified new socket-path diagnostics output

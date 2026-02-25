@@ -462,3 +462,47 @@ This phase intentionally focused on deterministic file/runtime path handling and
    - `node scripts/install-native-host.cjs <extension-id> --browser chromium`
    - `node scripts/uninstall-native-host.cjs --browser chromium`
    - `node native/cli.cjs tab.list`
+
+## Phase 10: Task 5 local validation complete, awaiting real-browser verification
+
+I ran local validation checks for syntax, targeted tests, installer/uninstaller behavior, and ticket doc health. At this point, the remaining verification requires an actual Chromium extension session, which cannot be fully simulated via CLI-only checks.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Phase 8)
+
+**Assistant interpretation:** Continue until a real-browser-dependent checkpoint requires user input, then pause and request it.
+
+**Inferred user intent:** Keep momentum with autonomous implementation while preserving correctness at browser integration boundaries.
+
+**Commit (code):** N/A (validation checkpoint)
+
+### What I did
+
+1. Verified script syntax:
+   - `node --check scripts/install-native-host.cjs`
+   - `node --check scripts/uninstall-native-host.cjs`
+2. Verified installer/uninstaller behavior locally:
+   - install creates both standard + snap Chromium manifests
+   - uninstall removes both targets
+3. Verified targeted tests:
+   - `npm run test -- test/unit/socket-path.test.ts`
+   - `npm run test -- test/unit/do-executor.test.ts`
+4. Verified ticket quality:
+   - `docmgr doctor --ticket SURF-20260225-R1 --stale-after 30` => all checks passed.
+
+### Why
+
+- Ensures implementation tasks are internally consistent before asking for user-assisted browser verification.
+
+### What worked
+
+- All local checks passed.
+
+### What didn't work
+
+- Full extension/native-host handshake verification from this environment alone (requires user-driven browser session).
+
+### What should be done in the future
+
+- Run user-assisted browser verification flow and then complete Task 5 and Task 6.
