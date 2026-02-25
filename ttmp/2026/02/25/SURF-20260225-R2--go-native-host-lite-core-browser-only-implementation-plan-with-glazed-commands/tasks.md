@@ -25,13 +25,13 @@
 - [x] T1.3: Implement Native Messaging frame writer.
 - [x] T1.4: Add malformed-frame handling and logging.
 - [x] T1.5: Implement socket path resolver with `SURF_SOCKET_PATH` override parity.
-- [ ] T1.6: Implement Unix socket / Windows pipe listener abstraction.
-- [ ] T1.7: Implement socket client session manager.
-- [ ] T1.8: Implement request ID allocator and pending map.
-- [ ] T1.9: Implement stream registry (`streamId -> socket`).
-- [ ] T1.10: Emit `HOST_READY` after socket server is active.
-- [ ] T1.11: Handle `stdin EOF` by notifying connected clients and exiting.
-- [ ] T1.12: Add SIGINT/SIGTERM cleanup (remove socket path on unix).
+- [x] T1.6: Implement Unix socket / Windows pipe listener abstraction.
+- [x] T1.7: Implement socket client session manager.
+- [x] T1.8: Implement request ID allocator and pending map.
+- [x] T1.9: Implement stream registry (`streamId -> socket`).
+- [x] T1.10: Emit `HOST_READY` after socket server is active.
+- [x] T1.11: Handle `stdin EOF` by notifying connected clients and exiting.
+- [x] T1.12: Add SIGINT/SIGTERM cleanup (remove socket path on unix).
 
 ## Phase 2 - Core Router and Host Runtime Behavior
 

@@ -15,7 +15,7 @@ const (
 
 var (
 	ErrFrameTooLarge = errors.New("nativeio: frame too large")
-	ErrInvalidJSON  = errors.New("nativeio: invalid json")
+	ErrInvalidJSON   = errors.New("nativeio: invalid json")
 )
 
 type Decoder struct {

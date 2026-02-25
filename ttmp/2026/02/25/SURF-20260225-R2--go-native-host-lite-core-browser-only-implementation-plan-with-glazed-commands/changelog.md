@@ -57,3 +57,22 @@ Created the initial Go host module scaffold, implemented Native Messaging frame 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/config/socket_path.go — Socket path parity logic and env override support
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/config/socket_path_test.go — Socket path unit tests
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/tasks.md — Marked T1.1-T1.5 complete
+
+## 2026-02-25 - Completed Phase 1 lifecycle + socket runtime tasks (T1.6-T1.12)
+
+Added the socket listener abstraction, client session management, pending/stream registries, and host runtime lifecycle wiring including `HOST_READY`, stdin EOF disconnect notification, and SIGINT/SIGTERM cleanup behavior.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Host runtime wiring for socket/native loops and lifecycle handling
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/listener.go — OS-agnostic listener abstraction
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/listener_unix.go — Unix socket implementation + cleanup behavior
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/listener_windows.go — Explicit Windows named-pipe placeholder behavior
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/session.go — Session manager and extension disconnect broadcast support
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/id_allocator.go — Numeric host request ID allocation
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/store.go — Pending request correlation map
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/stream_registry.go — Stream-to-session registry
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/session_test.go — Session manager tests
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/listener_unix_test.go — Unix listener test
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/store_test.go — Pending store tests
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/stream_registry_test.go — Stream registry tests

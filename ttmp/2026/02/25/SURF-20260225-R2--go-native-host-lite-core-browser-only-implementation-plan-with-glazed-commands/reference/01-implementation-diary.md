@@ -292,3 +292,44 @@ cd go && go test ./...
 3. Implemented socket path parity helper with `SURF_SOCKET_PATH` override and OS defaults (`/tmp/surf.sock`, `//./pipe/surf`).
 4. `go test ./...` passed for the current scaffold and tests.
 5. `tasks.md` Phase 1 items `T1.1` through `T1.5` were marked complete.
+
+## Phase 8 - Completed host transport lifecycle foundation (T1.6-T1.12)
+
+### Commands run
+
+```bash
+# wrote listener/session manager, pending/stream registries, and runtime wiring
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+```
+
+### Outputs created
+
+1. `go/internal/host/socketbridge/listener.go`
+2. `go/internal/host/socketbridge/listener_unix.go`
+3. `go/internal/host/socketbridge/listener_windows.go`
+4. `go/internal/host/socketbridge/session.go`
+5. `go/internal/host/socketbridge/listener_unix_test.go`
+6. `go/internal/host/socketbridge/session_test.go`
+7. `go/internal/host/pending/id_allocator.go`
+8. `go/internal/host/pending/store.go`
+9. `go/internal/host/pending/store_test.go`
+10. `go/internal/host/router/stream_registry.go`
+11. `go/internal/host/router/stream_registry_test.go`
+12. `go/cmd/surf-host-go/main.go`
+
+### Results
+
+1. Implemented local IPC listener abstraction with Unix socket implementation and Windows pipe placeholder (`ErrWindowsPipeUnsupported`) for explicit behavior.
+2. Implemented thread-safe socket session manager with extension disconnect notification broadcast behavior.
+3. Implemented request ID allocator and pending-request correlation store.
+4. Implemented stream registry (`streamId -> session`) with per-session teardown support.
+5. Wired host runtime to:
+   - start socket listener and emit `HOST_READY`,
+   - forward socket requests to native messaging with generated IDs,
+   - correlate native responses back to original socket sessions and IDs,
+   - handle `STREAM_EVENT` / `STREAM_ERROR` forwarding,
+   - notify socket clients on native stdin EOF (`extension_disconnected`),
+   - handle SIGINT/SIGTERM with listener shutdown and unix socket cleanup.
+6. `go test ./...` passed after formatting.
+7. `tasks.md` was updated to mark `T1.6` through `T1.12` complete.
