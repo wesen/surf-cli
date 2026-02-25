@@ -173,3 +173,20 @@ Improved CLI usability by adding first-class `navigate --url` plus quick `back`,
 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Typed navigate command with `--url`
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Command registration for navigate/back/forward/reload
+
+## 2026-02-25 - Investigated Node vs Go output shape and added structured formatter fields
+
+Re-ran live Node-vs-Go comparisons against Snap Chromium, introduced structured parsing in Go formatter rows (`tool`, `id`, `text`, `data_kind`, `data_count`, `data`, `content`, `result`), and captured before/after shape evidence plus a dedicated research reference.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format.go — Structured parser and row schema expansion
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format_test.go — Parser unit coverage for object/array extraction
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_simple.go — Tool-name propagation into formatter
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_raw.go — Tool-name propagation into formatter
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Tool-name propagation into formatter
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/stream_simple.go — Added stream metadata output fields
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/compare-go-node-output.cjs — Comparison harness
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/diff-go-node-summary.cjs — Shape diff helper
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/reference/04-node-vs-go-output-format-investigation-structured-json.md — Detailed investigation report
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/sources/output-compare/2026-02-25T23-48-23-122Z/SHAPE-DIFF-vs-2026-02-25T23-45-57-027Z.md — Before/after shape comparison artifact

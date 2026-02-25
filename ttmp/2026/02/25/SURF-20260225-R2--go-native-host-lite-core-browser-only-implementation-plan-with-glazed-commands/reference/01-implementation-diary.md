@@ -13,10 +13,18 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
-    - Path: native/host.cjs
-      Note: Host runtime behavior and lifecycle parity baseline
+    - Path: go/internal/cli/commands/format.go
+      Note: Structured formatter update captured in Step 18
+    - Path: go/internal/cli/commands/format_test.go
+      Note: Formatter parsing tests captured in Step 18
     - Path: native/host-helpers.cjs
       Note: Command/tool mapping inventory baseline
+    - Path: native/host.cjs
+      Note: Host runtime behavior and lifecycle parity baseline
+    - Path: scripts/compare-go-node-output.cjs
+      Note: Comparator script used in Step 18
+    - Path: scripts/diff-go-node-summary.cjs
+      Note: New helper script used in Step 18
     - Path: src/native/port-manager.ts
       Note: Extension-native host connect/reconnect and request matching baseline
     - Path: src/service-worker/index.ts
@@ -29,6 +37,7 @@ LastUpdated: 2026-02-25T17:39:00-05:00
 WhatFor: Preserve exact planning context, evidence, and command trace for continuation
 WhenToUse: Use when continuing implementation from this planning ticket
 ---
+
 
 # Implementation Diary
 
@@ -636,3 +645,93 @@ cd go && go run ./cmd/surf-go navigate --help
 1. Added explicit `navigate` command with `--url` (no `--args-json` required).
 2. Added quick navigation helpers: `back`, `forward`, `reload`.
 3. Confirmed command help surfaces correctly and full Go tests pass.
+
+## Step 18: Node vs Go JSON shape investigation and formatter hardening
+
+This step focused on validating whether the updated Go formatter actually improved machine-readable JSON output when talking to a real browser session via the Snap socket. The earlier output shape (`status/message/error/response`) made downstream parsing awkward and did not expose structured objects/arrays directly.
+
+I ran a fresh live comparison against the currently running extension socket, captured artifacts, and then generated a before/after shape diff to verify the format change empirically instead of relying only on code inspection.
+
+### Prompt Context
+
+**User prompt (verbatim):** "keep a detailed report / ressearch report as you do these format investigations. Feel free to write scripts in the scripts/ folder to help you reproduce the data"
+
+**Assistant interpretation:** Continue the Go-vs-Node output-format investigation with reproducible command/script evidence and keep ticket documentation updated while doing it.
+
+**Inferred user intent:** Ensure the JSON schema changes are objectively validated and documented so migration decisions are based on concrete, repeatable data.
+
+**Commit (code):** d00cd81 — "feat(surf-go): emit structured json fields from tool responses"
+
+### What I did
+
+- Re-ran live comparator against Snap socket:
+  - `SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" node scripts/compare-go-node-output.cjs`
+- Added helper script to compare shape summaries across two runs:
+  - `scripts/diff-go-node-summary.cjs`
+- Produced a shape diff report:
+  - `sources/output-compare/2026-02-25T23-48-23-122Z/SHAPE-DIFF-vs-2026-02-25T23-45-57-027Z.md`
+- Verified current code/tests:
+  - `cd go && go test ./...`
+- Authored a dedicated reference report:
+  - `reference/04-node-vs-go-output-format-investigation-structured-json.md`
+
+### Why
+
+- The migration blocker was output usability, not transport correctness.
+- We needed direct evidence that Go output is now parse-friendly for automation (especially for object/array tool payloads like `tab.list` and `page.state`).
+
+### What worked
+
+- New Go rows now expose parsed structured payloads via `data`:
+  - `tab.list` produced `data_kind=array`, `data_count=3`.
+  - `page.state` produced `data_kind=object`, `data_count=8`.
+- Original raw fields remain available for debugging (`content`, `result`, `text`, `id`, `tool`).
+- All Go tests pass after formatter changes.
+
+### What didn't work
+
+- Top-level parity is still not exact versus Node CLI.
+  - Node often returns direct object/array/string JSON.
+  - Go returns an array of row objects (Glazed model).
+- This is a deliberate schema model difference, not a runtime failure.
+
+### What I learned
+
+- Parsing `result.content[].text` into `data` covers the highest-value parity gap without breaking Glazed output conventions.
+- Including both normalized (`data`) and raw (`content`/`result`) fields gives better debugging ergonomics while keeping automation simple.
+
+### What was tricky to build
+
+- The key edge case is that many tool responses are textual and not valid JSON; parser logic must avoid false positives.
+- Approach used: parse text only when valid JSON and only keep object/array payloads as `data`; primitives remain in `text` with `data_kind=none`.
+
+### What warrants a second pair of eyes
+
+- Whether downstream users prefer keeping both `content` and `result` fields or dropping one for slimmer output.
+- Whether Glazed command groups should expose a compatibility mode that emits Node-like top-level shapes for selected commands.
+
+### What should be done in the future
+
+1. Add a compatibility flag (for example `--shape node`) for `tab.list` and `page.state` if exact Node JSON shape is required.
+2. Add contract tests asserting `data_kind`/`data_count` behavior for representative commands.
+3. Extend comparator coverage to stream commands and error scenarios.
+
+### Code review instructions
+
+- Start at formatter logic:
+  - `go/internal/cli/commands/format.go`
+  - `go/internal/cli/commands/format_test.go`
+- Validate live behavior:
+  - `SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" node scripts/compare-go-node-output.cjs`
+  - `node scripts/diff-go-node-summary.cjs <before> <after>`
+- Confirm no regressions:
+  - `cd go && go test ./...`
+
+### Technical details
+
+- Baseline comparison run:
+  - `sources/output-compare/2026-02-25T23-45-57-027Z`
+- Post-change comparison run:
+  - `sources/output-compare/2026-02-25T23-48-23-122Z`
+- Shape diff artifact:
+  - `sources/output-compare/2026-02-25T23-48-23-122Z/SHAPE-DIFF-vs-2026-02-25T23-45-57-027Z.md`

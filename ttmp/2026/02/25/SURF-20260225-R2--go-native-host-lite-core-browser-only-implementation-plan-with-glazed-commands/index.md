@@ -62,6 +62,7 @@ Deliverables in this ticket:
 4. Manual checklist: `reference/03-manual-browser-validation-checklist.md`
 5. Diary: `reference/01-implementation-diary.md`
 6. Changelog: `changelog.md`
+7. Output format investigation: `reference/04-node-vs-go-output-format-investigation-structured-json.md`
 
 ## Status
 
