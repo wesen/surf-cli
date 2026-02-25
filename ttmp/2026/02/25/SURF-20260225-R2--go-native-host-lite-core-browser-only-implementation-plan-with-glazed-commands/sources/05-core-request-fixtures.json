@@ -1,0 +1,304 @@
+{
+  "meta": {
+    "purpose": "Fixture table: socket request -> extension outbound message (core-v1)",
+    "coverage": ["page", "interaction", "tabs/windows/frames", "network/console", "streaming"],
+    "evidence": [
+      "native/host-helpers.cjs:527-1125",
+      "native/host.cjs:321-344",
+      "native/host.cjs:1575-1600"
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "page_read_default",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "page.read", "args": {} },
+        "id": "req-1"
+      },
+      "expected_extension_message": {
+        "type": "READ_PAGE",
+        "options": { "filter": "interactive", "includeText": true, "compact": false },
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "page_text",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "page.text", "args": {} },
+        "id": "req-2"
+      },
+      "expected_extension_message": { "type": "GET_PAGE_TEXT", "id": "<generated_numeric_id>" }
+    },
+    {
+      "name": "navigate",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "navigate", "args": { "url": "https://example.com" } },
+        "id": "req-3"
+      },
+      "expected_extension_message": {
+        "type": "EXECUTE_NAVIGATE",
+        "url": "https://example.com",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "click_alias",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "click", "args": { "ref": "e12" } },
+        "id": "req-4"
+      },
+      "expected_extension_message": {
+        "type": "CLICK_REF",
+        "ref": "e12",
+        "button": "left",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "type_with_text",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "type", "args": { "text": "hello" } },
+        "id": "req-5"
+      },
+      "expected_extension_message": {
+        "type": "EXECUTE_TYPE",
+        "text": "hello",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "key_repeat",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "key", "args": { "key": "Tab", "repeat": 3 } },
+        "id": "req-6"
+      },
+      "expected_extension_message": {
+        "type": "EXECUTE_KEY_REPEAT",
+        "key": "Tab",
+        "repeat": 3,
+        "tabId": "<resolved_tab_id>",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "scroll_down",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "scroll", "args": { "scroll_direction": "down", "scroll_amount": 2 } },
+        "id": "req-7"
+      },
+      "expected_extension_message": {
+        "type": "EXECUTE_SCROLL",
+        "deltaX": 0,
+        "deltaY": 200,
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "screenshot",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "screenshot", "args": { "output": "/tmp/out.png" } },
+        "id": "req-8"
+      },
+      "expected_extension_message": {
+        "type": "EXECUTE_SCREENSHOT",
+        "savePath": "/tmp/out.png",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "tab_list",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "tab.list", "args": {} },
+        "id": "req-9"
+      },
+      "expected_extension_message": { "type": "LIST_TABS", "id": "<generated_numeric_id>" }
+    },
+    {
+      "name": "tab_switch_named",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "tab.switch", "args": { "id": "docs" } },
+        "id": "req-10"
+      },
+      "expected_host_behavior": [
+        "send TABS_GET_BY_NAME",
+        "on success send SWITCH_TAB with resolved tabId"
+      ]
+    },
+    {
+      "name": "window_resize",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "window.resize", "args": { "id": 12, "width": 1400, "height": 900 } },
+        "id": "req-11"
+      },
+      "expected_extension_message": {
+        "type": "WINDOW_RESIZE",
+        "windowId": 12,
+        "width": 1400,
+        "height": 900,
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "frame_switch",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "frame.switch", "args": { "selector": "iframe#content" } },
+        "id": "req-12"
+      },
+      "expected_extension_message": {
+        "type": "FRAME_SWITCH",
+        "selector": "iframe#content",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "dialog_accept",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "dialog.accept", "args": { "text": "OK" } },
+        "id": "req-13"
+      },
+      "expected_extension_message": {
+        "type": "DIALOG_ACCEPT",
+        "text": "OK",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "network_read",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "network", "args": { "limit": 20, "method": "GET" } },
+        "id": "req-14"
+      },
+      "expected_extension_message": {
+        "type": "READ_NETWORK_REQUESTS",
+        "limit": 20,
+        "method": "GET",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "network_get_entry",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "network.get", "args": { "id": "req-abc" } },
+        "id": "req-15"
+      },
+      "expected_extension_message": {
+        "type": "GET_NETWORK_ENTRY",
+        "requestId": "req-abc",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "console_read",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "console", "args": { "limit": 50, "only_errors": true } },
+        "id": "req-16"
+      },
+      "expected_extension_message": {
+        "type": "READ_CONSOLE_MESSAGES",
+        "limit": 50,
+        "onlyErrors": true,
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "cookie_set",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "cookie.set", "args": { "name": "session", "value": "abc" } },
+        "id": "req-17"
+      },
+      "expected_extension_message": {
+        "type": "COOKIE_SET",
+        "name": "session",
+        "value": "abc",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "emulate_device",
+      "socket_request": {
+        "type": "tool_request",
+        "method": "execute_tool",
+        "params": { "tool": "emulate.device", "args": { "device": "iPhone 14 Pro" } },
+        "id": "req-18"
+      },
+      "expected_extension_message": {
+        "type": "EMULATE_DEVICE",
+        "device": "iPhone 14 Pro",
+        "id": "<generated_numeric_id>"
+      }
+    },
+    {
+      "name": "stream_console_start",
+      "socket_request": {
+        "type": "stream_request",
+        "streamType": "STREAM_CONSOLE",
+        "options": { "level": "error" },
+        "id": "stream-1",
+        "tabId": 123
+      },
+      "expected_extension_message": {
+        "type": "STREAM_CONSOLE",
+        "streamId": "<generated_numeric_id>",
+        "options": { "level": "error" },
+        "tabId": 123
+      },
+      "expected_socket_event": { "type": "stream_started", "streamId": "<generated_numeric_id>" }
+    },
+    {
+      "name": "stream_network_start",
+      "socket_request": {
+        "type": "stream_request",
+        "streamType": "STREAM_NETWORK",
+        "options": { "filter": "api" },
+        "id": "stream-2"
+      },
+      "expected_extension_message": {
+        "type": "STREAM_NETWORK",
+        "streamId": "<generated_numeric_id>",
+        "options": { "filter": "api" }
+      }
+    },
+    {
+      "name": "stream_stop",
+      "socket_request": { "type": "stream_stop" },
+      "expected_host_behavior": [
+        "for each active stream owned by this socket emit {type:'STREAM_STOP',streamId}",
+        "remove stream from registry"
+      ]
+    }
+  ]
+}

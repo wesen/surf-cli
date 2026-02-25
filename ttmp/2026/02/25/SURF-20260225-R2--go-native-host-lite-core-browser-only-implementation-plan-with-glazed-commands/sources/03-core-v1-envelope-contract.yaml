@@ -1,0 +1,69 @@
+meta:
+  purpose: "Frozen host/socket/native envelope contract for Go Host Lite v1"
+  evidence:
+    - "native/cli.cjs:1970-2004"
+    - "native/cli.cjs:2741-2867"
+    - "native/host.cjs:1288-1668"
+    - "native/protocol.cjs:1-27"
+    - "src/native/port-manager.ts:17-112"
+
+socket_ingress:
+  tool_request:
+    required_fields: [type, method, params]
+    type_value: tool_request
+    method_values: [execute_tool]
+    params_shape:
+      required_fields: [tool]
+      optional_fields: [args, tabId, windowId]
+    notes:
+      - "id is optional from client; host uses msg.id as original request id if present"
+  stream_request:
+    required_fields: [type, streamType]
+    type_value: stream_request
+    optional_fields: [options, id, tabId]
+    supported_stream_types_v1: [STREAM_CONSOLE, STREAM_NETWORK]
+  stream_stop:
+    required_fields: [type]
+    type_value: stream_stop
+    notes:
+      - "Current Node behavior stops all active streams for that socket"
+
+native_messaging_envelope:
+  framing:
+    format: "4-byte little-endian length + UTF-8 JSON payload"
+    decoder_behavior:
+      - "buffer until complete frame"
+      - "JSON parse failure yields {error: 'Invalid JSON'} in protocol helper"
+
+host_egress_to_extension:
+  startup:
+    message: { type: HOST_READY }
+  forwarded_messages:
+    - "core mapped tool messages with generated numeric id"
+    - "stream start/stop control messages"
+
+socket_egress_to_cli:
+  tool_response_success:
+    shape:
+      required_fields: [type, id, result]
+      type_value: tool_response
+      result_shape: "result.content array (formatted content blocks)"
+  tool_response_error:
+    shape:
+      required_fields: [type, id, error]
+      type_value: tool_response
+      error_shape: "error.content array with text entries"
+  stream_started:
+    shape: { type: stream_started, streamId: int }
+  stream_event:
+    shape: "raw JSON event forwarded line-by-line"
+  extension_disconnected:
+    shape:
+      required_fields: [type, message]
+      type_value: extension_disconnected
+
+response_normalization_rules:
+  - "Pure extension error (error without richer payload) becomes tool_response.error"
+  - "Non-error payload becomes tool_response.result"
+  - "Stream events/errors are forwarded to active stream sockets"
+  - "On native stdin EOF, connected sockets receive extension_disconnected then close"

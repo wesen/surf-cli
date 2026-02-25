@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "purpose": "Fixture table: extension/native responses -> socket client outputs",
+    "evidence": [
+      "native/host.cjs:1307-1491",
+      "native/host.cjs:1506-1520",
+      "native/host.cjs:305-319"
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "pure_error_to_tool_response_error",
+      "context": "pendingToolRequest without onComplete",
+      "incoming_extension_message": { "id": 101, "error": "Element not found" },
+      "expected_socket_message": {
+        "type": "tool_response",
+        "id": "<original_socket_request_id>",
+        "error": { "content": [{ "type": "text", "text": "Element not found" }] }
+      }
+    },
+    {
+      "name": "success_payload_to_tool_response_result",
+      "context": "pendingToolRequest without onComplete",
+      "incoming_extension_message": { "id": 102, "success": true, "tabId": 45 },
+      "expected_socket_message": {
+        "type": "tool_response",
+        "id": "<original_socket_request_id>",
+        "result": { "content": "<formatted_content_blocks>" }
+      }
+    },
+    {
+      "name": "non_pure_error_is_result",
+      "context": "pendingToolRequest without onComplete",
+      "incoming_extension_message": { "id": 103, "error": "Minor warning", "tabs": [] },
+      "expected_socket_message": {
+        "type": "tool_response",
+        "id": "<original_socket_request_id>",
+        "result": { "content": "<formatted_content_blocks_including_payload>" }
+      }
+    },
+    {
+      "name": "stream_event_forwarding",
+      "context": "active stream socket exists",
+      "incoming_extension_message": { "type": "STREAM_EVENT", "streamId": 77, "event": { "type": "console_event", "text": "x" } },
+      "expected_socket_message": { "type": "console_event", "text": "x" }
+    },
+    {
+      "name": "stream_error_forwarding",
+      "context": "active stream socket exists",
+      "incoming_extension_message": { "type": "STREAM_ERROR", "streamId": 78, "error": "Failed to subscribe" },
+      "expected_socket_message": { "error": "Failed to subscribe" }
+    },
+    {
+      "name": "extension_disconnect_broadcast",
+      "context": "native stdin ends",
+      "host_event": "stdin_eof",
+      "expected_socket_message": {
+        "type": "extension_disconnected",
+        "message": "Surf extension was reloaded. Restart your command."
+      },
+      "expected_followup": "socket_closed"
+    },
+    {
+      "name": "host_ready_native_message",
+      "context": "socket server started",
+      "host_event": "server_listen",
+      "expected_native_message": { "type": "HOST_READY" }
+    }
+  ]
+}

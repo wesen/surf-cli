@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "purpose": "Explicit unsupported tool list for Go Host Lite v1",
+    "generated_for": "T0.3"
+  },
+  "unsupported_provider_tools": [
+    "ai",
+    "chatgpt",
+    "gemini",
+    "perplexity",
+    "grok",
+    "aistudio",
+    "aistudio.build"
+  ],
+  "unsupported_deferred_tools": [
+    "smoke",
+    "batch",
+    "health",
+    "perf.start",
+    "perf.stop",
+    "perf.metrics",
+    "bookmark.add",
+    "bookmark.remove",
+    "bookmark.list",
+    "history.list",
+    "history.search"
+  ],
+  "error_contract": {
+    "shape": {
+      "type": "tool_response",
+      "id": "<original_request_id>",
+      "error": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Command '<tool>' is not supported in go-core profile"
+          }
+        ]
+      }
+    }
+  }
+}

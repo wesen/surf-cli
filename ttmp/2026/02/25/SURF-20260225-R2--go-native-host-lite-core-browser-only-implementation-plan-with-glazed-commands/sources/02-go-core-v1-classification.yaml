@@ -1,0 +1,144 @@
+meta:
+  purpose: "Go Host Lite v1 tool classification"
+  source_inventory: "sources/01-tool-inventory.json"
+  rationale: "Prioritize core browser control; exclude provider-specific and lower-priority convenience flows from initial Go host delivery"
+
+provider_unsupported:
+  - tool: ai
+    reason: "Depends on host-side GoogleGenerativeAI path and is not a browser primitive"
+  - tool: chatgpt
+    reason: "Provider-specific site automation"
+  - tool: gemini
+    reason: "Provider-specific site/web-protocol automation"
+  - tool: perplexity
+    reason: "Provider-specific site automation"
+  - tool: grok
+    reason: "Provider-specific site automation"
+  - tool: aistudio
+    reason: "Provider-specific site automation"
+  - tool: aistudio.build
+    reason: "Provider-specific app-builder automation"
+
+v1_deferred:
+  - tool: smoke
+    reason: "Scenario convenience wrapper; can be composed later from core commands"
+  - tool: batch
+    reason: "Batch orchestration convenience wrapper; not required for transport parity"
+  - tool: health
+    reason: "Composite convenience command over other tools"
+  - tool: perf.start
+    reason: "Lower-priority profiling flow"
+  - tool: perf.stop
+    reason: "Lower-priority profiling flow"
+  - tool: perf.metrics
+    reason: "Lower-priority profiling flow"
+  - tool: bookmark.add
+    reason: "Non-critical for first core-browser parity milestone"
+  - tool: bookmark.remove
+    reason: "Non-critical for first core-browser parity milestone"
+  - tool: bookmark.list
+    reason: "Non-critical for first core-browser parity milestone"
+  - tool: history.list
+    reason: "Non-critical for first core-browser parity milestone"
+  - tool: history.search
+    reason: "Non-critical for first core-browser parity milestone"
+
+core_v1_priority_groups:
+  page:
+    - read_page
+    - page.read
+    - get_page_text
+    - page.text
+    - page_state
+    - page.state
+    - search
+    - wait_for_element
+    - wait.element
+    - wait_for_url
+    - wait.url
+    - wait_for_network_idle
+    - wait.network
+    - wait.dom
+    - wait.load
+  interaction:
+    - computer
+    - click
+    - left_click
+    - right_click
+    - double_click
+    - triple_click
+    - hover
+    - drag
+    - scroll
+    - scroll.to
+    - scroll.top
+    - scroll.bottom
+    - scroll.info
+    - type
+    - key
+    - find_and_type
+    - form_input
+    - form.fill
+    - select
+    - screenshot
+    - js
+    - javascript_tool
+    - eval
+  tabs_windows_frames_dialogs:
+    - list_tabs
+    - tab.list
+    - new_tab
+    - tab.new
+    - switch_tab
+    - tab.switch
+    - close_tab
+    - tab.close
+    - tabs_register
+    - tabs_get_by_name
+    - tabs_list_named
+    - tabs_unregister
+    - tab.name
+    - tab.unname
+    - tab.named
+    - tabs_create
+    - frame.list
+    - frame.switch
+    - frame.main
+    - frame.js
+    - window.new
+    - window.list
+    - window.focus
+    - window.close
+    - window.resize
+    - dialog.accept
+    - dialog.dismiss
+    - dialog.info
+  network_console_cookies_emulation:
+    - console
+    - read_console_messages
+    - network
+    - get_network_entries
+    - network.get
+    - get_network_entry
+    - network.body
+    - network.curl
+    - network.origins
+    - network.clear
+    - network.stats
+    - network.export
+    - network.path
+    - read_network_requests
+    - cookie.list
+    - cookie.get
+    - cookie.set
+    - cookie.clear
+    - emulate.network
+    - emulate.cpu
+    - emulate.geo
+    - emulate.device
+    - emulate.viewport
+    - emulate.touch
+
+notes:
+  - "Go Host Lite v1 should return explicit unsupported errors for provider_unsupported and v1_deferred tools."
+  - "Alias forms are retained for compatibility; implementation can normalize aliases internally."
