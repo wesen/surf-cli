@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/nicobailon/surf-cli/gohost/internal/host/config"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/nativeio"
@@ -180,15 +182,80 @@ func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []by
 	msgType := asString(msg["type"])
 	switch msgType {
 	case "tool_request":
-		if _, err := router.ParseToolRequest(msg); err != nil {
-			h.writeClientError(session, err.Error())
+		req, err := router.ParseToolRequest(msg)
+		if err != nil {
+			h.sendToolError(session, msg["id"], err.Error())
 			return
 		}
+
+		extensionMsg, err := router.MapToolToMessage(req)
+		if err != nil {
+			h.sendToolError(session, requestOriginalID(req), err.Error())
+			return
+		}
+
+		if asString(extensionMsg["type"]) == "UNSUPPORTED_ACTION" {
+			h.sendToolError(session, requestOriginalID(req), asString(extensionMsg["message"]))
+			return
+		}
+		if asString(extensionMsg["type"]) == "LOCAL_WAIT" {
+			seconds, ok := asInt64(extensionMsg["seconds"])
+			if !ok || seconds < 1 {
+				seconds = 1
+			}
+			if seconds > 30 {
+				seconds = 30
+			}
+			orig := requestOriginalID(req)
+			time.AfterFunc(time.Duration(seconds)*time.Second, func() {
+				h.sendToolResult(session, orig, map[string]any{"success": true})
+			})
+			return
+		}
+
+		hostID := h.ids.Next()
+		p := pending.Request{
+			Session: session,
+			Kind:    pending.KindToolRequest,
+		}
+		if req.HasOriginalID {
+			p.OriginalID = req.OriginalID
+			p.HasOriginalID = true
+		}
+		h.pending.Put(hostID, p)
+		extensionMsg["id"] = hostID
+
+		if err := h.writeNative(extensionMsg); err != nil {
+			_, _ = h.pending.Pop(hostID)
+			h.sendToolError(session, requestOriginalID(req), "Native host unavailable")
+		}
+		return
 	case "stream_request":
-		if _, err := router.ParseStreamRequest(msg); err != nil {
+		req, err := router.ParseStreamRequest(msg)
+		if err != nil {
 			h.writeClientError(session, err.Error())
 			return
 		}
+
+		streamID := h.ids.Next()
+		h.streams.Set(streamID, session)
+		forward := map[string]any{
+			"type":     req.StreamType,
+			"streamId": streamID,
+			"options":  req.Options,
+		}
+		if tabID, ok := asInt64(msg["tabId"]); ok {
+			forward["tabId"] = tabID
+		}
+		if err := h.writeNative(forward); err != nil {
+			h.streams.Delete(streamID)
+			h.writeClientError(session, "Native host unavailable")
+			return
+		}
+		if err := session.WriteJSONLine(map[string]any{"type": "stream_started", "streamId": streamID}); err != nil {
+			h.disconnectSession(session)
+		}
+		return
 	case "stream_stop":
 		if err := router.ParseStreamStop(msg); err != nil {
 			h.writeClientError(session, err.Error())
@@ -203,7 +270,7 @@ func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []by
 		Session: session,
 		Kind:    toRequestKind(msgType),
 	}
-	if id, ok := asInt64(msg["id"]); ok {
+	if id, ok := msg["id"]; ok {
 		req.OriginalID = id
 		req.HasOriginalID = true
 	}
@@ -298,10 +365,18 @@ func (h *hostRuntime) handleNativeMessage(msg map[string]any) {
 		return
 	}
 
-	if req.Kind == pending.KindStream && msgType == "STREAM_STARTED" {
-		if streamID, ok := asInt64(msg["streamId"]); ok {
-			h.streams.Set(streamID, req.Session)
+	if req.Kind == pending.KindToolRequest {
+		originalID := any(nil)
+		if req.HasOriginalID {
+			originalID = req.OriginalID
 		}
+		payload := stripInternalID(msg)
+		if errText, pure := pureExtensionError(payload); pure {
+			h.sendToolError(req.Session, originalID, errText)
+			return
+		}
+		h.sendToolResult(req.Session, originalID, payload)
+		return
 	}
 
 	if req.HasOriginalID {
@@ -325,6 +400,41 @@ func (h *hostRuntime) writeClientError(session *socketbridge.Session, message st
 	if err := session.WriteJSONLine(map[string]any{"error": message}); err != nil {
 		h.log.Printf("failed to write client error: %v", err)
 	}
+}
+
+func (h *hostRuntime) sendToolError(session *socketbridge.Session, id any, message string) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"id":   id,
+		"error": map[string]any{
+			"content": []map[string]any{
+				{"type": "text", "text": message},
+			},
+		},
+	}
+	if err := session.WriteJSONLine(resp); err != nil {
+		h.log.Printf("failed to write tool error: %v", err)
+	}
+}
+
+func (h *hostRuntime) sendToolResult(session *socketbridge.Session, id any, result any) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"id":   id,
+		"result": map[string]any{
+			"content": formatToolContent(result),
+		},
+	}
+	if err := session.WriteJSONLine(resp); err != nil {
+		h.log.Printf("failed to write tool result: %v", err)
+	}
+}
+
+func requestOriginalID(req router.ToolRequest) any {
+	if req.HasOriginalID {
+		return req.OriginalID
+	}
+	return nil
 }
 
 func toRequestKind(msgType string) pending.RequestKind {
@@ -362,6 +472,65 @@ func asInt64(v any) (int64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func stripInternalID(msg map[string]any) map[string]any {
+	out := make(map[string]any, len(msg))
+	for k, v := range msg {
+		if k == "id" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func pureExtensionError(msg map[string]any) (string, bool) {
+	rawErr, ok := msg["error"]
+	if !ok {
+		return "", false
+	}
+	for k, v := range msg {
+		if k == "type" || k == "error" {
+			continue
+		}
+		if v != nil {
+			return "", false
+		}
+	}
+	switch e := rawErr.(type) {
+	case string:
+		return e, true
+	default:
+		b, err := json.Marshal(e)
+		if err != nil {
+			return fmt.Sprintf("%v", e), true
+		}
+		return string(b), true
+	}
+}
+
+func formatToolContent(result any) []map[string]any {
+	text := func(s string) []map[string]any {
+		return []map[string]any{{"type": "text", "text": s}}
+	}
+	if result == nil {
+		return text("OK")
+	}
+
+	if m, ok := result.(map[string]any); ok {
+		for _, key := range []string{"output", "message", "text", "pageContent"} {
+			if s, ok := m[key].(string); ok && s != "" {
+				return text(s)
+			}
+		}
+	}
+
+	b, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return text(fmt.Sprintf("%v", result))
+	}
+	return text(string(b))
 }
 
 func newLogger() (*log.Logger, io.Closer) {

@@ -38,13 +38,13 @@
 - [x] T2.1: Parse and validate incoming socket `tool_request` payloads.
 - [x] T2.2: Parse and validate incoming socket `stream_request` payloads.
 - [x] T2.3: Parse and validate incoming socket `stream_stop` payloads.
-- [ ] T2.4: Implement host-side routing for core-v1 tools.
-- [ ] T2.5: Forward extension-bound messages preserving IDs.
-- [ ] T2.6: Correlate extension responses to pending socket clients.
-- [ ] T2.7: Implement stream event forwarding (`STREAM_EVENT`, `STREAM_ERROR`).
-- [ ] T2.8: Implement provider-command rejection path with clear error text.
-- [ ] T2.9: Implement parity handling for `GET_AUTH` passthrough.
-- [ ] T2.10: Implement parity handling for `API_REQUEST` passthrough.
+- [x] T2.4: Implement host-side routing for core-v1 tools.
+- [x] T2.5: Forward extension-bound messages preserving IDs.
+- [x] T2.6: Correlate extension responses to pending socket clients.
+- [x] T2.7: Implement stream event forwarding (`STREAM_EVENT`, `STREAM_ERROR`).
+- [x] T2.8: Implement provider-command rejection path with clear error text.
+- [x] T2.9: Implement parity handling for `GET_AUTH` passthrough.
+- [x] T2.10: Implement parity handling for `API_REQUEST` passthrough.
 
 ## Phase 3 - Glazed CLI Skeleton
 

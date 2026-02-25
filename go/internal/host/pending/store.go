@@ -18,7 +18,7 @@ const (
 type Request struct {
 	Session       *socketbridge.Session
 	Kind          RequestKind
-	OriginalID    int64
+	OriginalID    any
 	HasOriginalID bool
 }
 

@@ -362,3 +362,39 @@ cd go && go test ./...
 2. Wired validation into host runtime before request forwarding, returning structured CLI error lines on malformed requests.
 3. `go test ./...` passed.
 4. `tasks.md` updated to mark `T2.1`, `T2.2`, and `T2.3` complete.
+
+## Phase 10 - Implemented core-v1 routing and response correlation runtime (T2.4-T2.10)
+
+### Commands run
+
+```bash
+# wrote core tool mapping + unsupported guards and rewired runtime request handling
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+```
+
+### Outputs created
+
+1. `go/internal/host/router/toolmap.go`
+2. `go/internal/host/router/toolmap_test.go`
+
+### Files modified
+
+1. `go/cmd/surf-host-go/main.go`
+2. `go/internal/host/router/ingress.go`
+3. `go/internal/host/router/ingress_test.go`
+4. `go/internal/host/pending/store.go`
+
+### Results
+
+1. Added core-v1 tool routing in Go host for the browser primitives and aliases, including `page.*`, `click/type/key/hover/drag/scroll`, tabs/windows/frames/dialog, network/console/cookie/emulation, and utility aliases (`back`, `forward`, `zoom`, `tab.reload`).
+2. Implemented explicit provider/deferred command rejection with v1 error text:
+   - `Command '<tool>' is not supported in go-core profile`.
+3. Added `computer` action mapping parity path with action-level translation (`CLICK_REF`, `EXECUTE_KEY_REPEAT`, `EXECUTE_SCROLL`, etc.).
+4. Updated runtime to route `tool_request` through the mapper and to emit `tool_response` envelopes (error or result) back to socket clients.
+5. Updated stream handling parity:
+   - `stream_request` now allocates stream IDs host-side, forwards to extension, and immediately returns `stream_started`.
+   - `STREAM_EVENT` and `STREAM_ERROR` are forwarded to stream-owning sockets.
+6. Preserved passthrough flow for non-tool requests (`GET_AUTH`, `API_REQUEST`) through the pending correlation path with original IDs restored.
+7. `go test ./...` passed.
+8. `tasks.md` updated to mark `T2.4` through `T2.10` complete.

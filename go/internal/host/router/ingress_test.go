@@ -18,12 +18,29 @@ func TestParseToolRequestValid(t *testing.T) {
 	if req.Params.Tool != "page.read" {
 		t.Fatalf("unexpected tool: %q", req.Params.Tool)
 	}
+	if req.HasOriginalID {
+		t.Fatalf("did not expect original id")
+	}
 }
 
 func TestParseToolRequestInvalid(t *testing.T) {
 	_, err := ParseToolRequest(map[string]any{"type": "tool_request"})
 	if err == nil {
 		t.Fatalf("expected validation error")
+	}
+}
+
+func TestParseToolRequestTabIDValidation(t *testing.T) {
+	_, err := ParseToolRequest(map[string]any{
+		"type":   "tool_request",
+		"method": "execute_tool",
+		"tabId":  "abc",
+		"params": map[string]any{
+			"tool": "page.read",
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected tabId validation error")
 	}
 }
 

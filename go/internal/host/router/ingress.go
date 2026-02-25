@@ -2,12 +2,17 @@ package router
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type ToolRequest struct {
-	Type   string
-	Method string
-	Params ToolParams
+	Type          string
+	Method        string
+	Params        ToolParams
+	OriginalID    any
+	HasOriginalID bool
+	TabID         *int64
+	WindowID      *int64
 }
 
 type ToolParams struct {
@@ -50,10 +55,24 @@ func ParseToolRequest(msg map[string]any) (ToolRequest, error) {
 		args = decodedArgs
 	}
 
+	tabID, err := parsePreferredInt(msg["tabId"], paramsMap["tabId"], args["tabId"])
+	if err != nil {
+		return ToolRequest{}, fmt.Errorf("tabId must be a number")
+	}
+
+	windowID, err := parsePreferredInt(msg["windowId"], paramsMap["windowId"], args["windowId"])
+	if err != nil {
+		return ToolRequest{}, fmt.Errorf("windowId must be a number")
+	}
+
 	return ToolRequest{
-		Type:   msgType,
-		Method: method,
-		Params: ToolParams{Tool: tool, Args: args},
+		Type:          msgType,
+		Method:        method,
+		Params:        ToolParams{Tool: tool, Args: args},
+		OriginalID:    msg["id"],
+		HasOriginalID: msg["id"] != nil,
+		TabID:         tabID,
+		WindowID:      windowID,
 	}, nil
 }
 
@@ -88,4 +107,44 @@ func ParseStreamStop(msg map[string]any) error {
 		return fmt.Errorf("invalid stream_stop: missing type=stream_stop")
 	}
 	return nil
+}
+
+func parsePreferredInt(values ...any) (*int64, error) {
+	for _, v := range values {
+		if v == nil {
+			continue
+		}
+		n, ok, err := parseInt64(v)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return &n, nil
+		}
+	}
+	return nil, nil
+}
+
+func parseInt64(v any) (int64, bool, error) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true, nil
+	case int32:
+		return int64(n), true, nil
+	case int64:
+		return n, true, nil
+	case float64:
+		return int64(n), true, nil
+	case string:
+		if n == "" {
+			return 0, false, nil
+		}
+		x, err := strconv.ParseInt(n, 10, 64)
+		if err != nil {
+			return 0, false, err
+		}
+		return x, true, nil
+	default:
+		return 0, false, fmt.Errorf("unsupported int value")
+	}
 }

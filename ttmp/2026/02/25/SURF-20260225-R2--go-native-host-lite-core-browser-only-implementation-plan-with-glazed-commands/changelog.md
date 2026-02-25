@@ -86,3 +86,15 @@ Added strict parser/validator logic for `tool_request`, `stream_request`, and `s
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress.go — Message-shape validation for socket ingress types
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress_test.go — Validation tests for accepted/rejected payload shapes
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Runtime integration of ingress validation and CLI error response path
+
+## 2026-02-25 - Implemented core-v1 routing and runtime correlation (T2.4-T2.10)
+
+Implemented host-side core tool routing, provider/deferred rejection paths, stream start/event handling parity, and tool-response envelope normalization for socket clients while preserving passthrough behavior for non-tool native commands.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/toolmap.go — Core-v1 tool and computer-action message mapping + unsupported command guards
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/toolmap_test.go — Mapping and unsupported-path tests
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress.go — Extended tool request parse output (id/tab/window metadata)
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/store.go — Pending metadata updated to preserve arbitrary original request IDs
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Runtime routing, stream/session behavior, and `tool_response` shaping
