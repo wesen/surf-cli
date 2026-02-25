@@ -1,0 +1,349 @@
+---
+Title: Investigation Diary
+Ticket: SURF-20260225-R1
+Status: active
+Topics:
+    - linux
+    - chromium
+    - snap
+    - native-messaging
+    - debugging
+    - architecture
+DocType: reference
+Intent: long-term
+Owners: []
+RelatedFiles:
+    - Path: native/cli.cjs
+      Note: Diary captures CLI error outcomes from socket connection failures
+    - Path: native/host.cjs
+      Note: Diary captures socket and host lifecycle evidence from this runtime
+    - Path: scripts/install-native-host.cjs
+      Note: Commands and outcomes depend on installer path/wrapper logic
+ExternalSources: []
+Summary: Chronological command log and reasoning trail for full Snap Chromium compatibility research and report delivery.
+LastUpdated: 2026-02-25T16:04:46.979814202-05:00
+WhatFor: Preserve reproducible investigation history for future implementation
+WhenToUse: Use to reproduce findings and verify assumptions during implementation
+---
+
+
+# Investigation Diary
+
+## Goal
+
+Produce a full research report for Snap Chromium native host compatibility in Surf CLI, backed by local reproduction and external primary sources, then upload the deliverable bundle to reMarkable.
+
+## Prompt Context
+
+**User prompt (verbatim):** "write a full research report and upload to remarkable. $ticket-research-docmgr-remarkable"
+
+**Assistant interpretation:** Create a new docmgr ticket with a full design-grade research report + detailed diary, run quality checks, and upload a bundled PDF to reMarkable.
+
+**Inferred user intent:** Obtain a durable, shareable engineering document suitable for implementation planning and review.
+
+**Commit (code):** N/A (documentation/research only)
+
+## Phase 1: Ticket setup and doc scaffolding
+
+### Commands run
+
+```bash
+docmgr ticket create-ticket --ticket SURF-20260225-R1 --title "Full research report: Snap Chromium native host compatibility for Surf CLI" --topics linux,chromium,snap,native-messaging,debugging,architecture
+docmgr doc add --ticket SURF-20260225-R1 --doc-type design-doc --title "Snap Chromium Native Messaging Compatibility Research Report"
+docmgr doc add --ticket SURF-20260225-R1 --doc-type reference --title "Investigation Diary"
+docmgr doc list --ticket SURF-20260225-R1
+```
+
+### Findings
+
+1. Ticket workspace and required docs were created successfully.
+2. Paths created:
+   - `.../design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md`
+   - `.../reference/01-investigation-diary.md`
+
+### What worked
+
+- `docmgr` ticket and document creation workflow completed without errors.
+
+### What didn't work
+
+- N/A.
+
+## Phase 2: Repository evidence collection (line-anchored)
+
+### Commands run
+
+```bash
+nl -ba scripts/install-native-host.cjs | sed -n '1,260p'
+nl -ba scripts/install-native-host.cjs | sed -n '260,380p'
+nl -ba scripts/uninstall-native-host.cjs | sed -n '1,220p'
+nl -ba native/host.cjs | sed -n '1,120p'
+nl -ba native/host.cjs | sed -n '1520,1668p'
+nl -ba native/cli.cjs | sed -n '1,60p'
+nl -ba native/cli.cjs | sed -n '2920,2960p'
+nl -ba src/native/port-manager.ts | sed -n '1,160p'
+nl -ba README.md | sed -n '648,670p'
+```
+
+### Findings
+
+1. Linux install path assumptions:
+   - manifest: `.config/chromium/NativeMessagingHosts`
+   - wrapper dir: `.local/share/surf-cli`
+2. Host and CLI use fixed Linux socket path: `/tmp/surf.sock`.
+3. Extension uses `connectNative("surf.browser.host")` and logs disconnect reasons.
+4. README marks Linux support as experimental.
+
+### What worked
+
+- Evidence clearly supports architecture and gap analysis sections.
+
+### What didn't work
+
+- N/A.
+
+## Phase 3: Local runtime reproduction and failure isolation
+
+### Commands run
+
+```bash
+chromium --version && snap list chromium
+surf install jgbccjmbpfinlegbjkomjeoiklaijmmm --browser chromium
+surf tab.list || true
+snap run --shell chromium -c 'echo HOME=$HOME; echo CHROME_CONFIG_HOME=$CHROME_CONFIG_HOME; echo SNAP_USER_COMMON=$SNAP_USER_COMMON; echo XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR'
+snap run --shell chromium -c '/home/manuel/.local/share/surf-cli/host-wrapper.sh </dev/null >/tmp/snap-wrap.out 2>/tmp/snap-wrap.err; echo EXIT:$?; cat /tmp/snap-wrap.err'
+snap run --shell chromium -c '/home/manuel/.nvm/versions/node/v22.21.0/bin/node --version; echo EXIT:$?'
+stat -c 'host %n inode=%i mtime=%y' /tmp/surf.sock 2>/dev/null || echo 'host /tmp/surf.sock missing'
+snap run --shell chromium -c 'stat -c "snap %n inode=%i mtime=%y" /tmp/surf.sock 2>/dev/null || echo "snap /tmp/surf.sock missing"'
+```
+
+### Key outputs captured
+
+1. `Chromium 145.0.7632.109 snap`
+2. Installer output:
+   - wrapper: `/home/manuel/.local/share/surf-cli/host-wrapper.sh`
+   - manifest: `/home/manuel/.config/chromium/NativeMessagingHosts/surf.browser.host.json`
+3. CLI failure:
+   - `Error: Connection refused. Native host not running.`
+4. Snap env:
+   - `HOME=/home/manuel/snap/chromium/3369`
+   - `CHROME_CONFIG_HOME=/home/manuel/snap/chromium/common`
+   - `XDG_RUNTIME_DIR=/run/user/1000/snap.chromium`
+5. Snap execution failures:
+   - wrapper: `EXIT:126 ... Permission denied`
+   - node in `.nvm`: `EXIT:126 ... Permission denied`
+6. Socket inode mismatch:
+   - host `/tmp/surf.sock` inode `8995165`
+   - snap `/tmp/surf.sock` inode `12069922`
+
+### What worked
+
+- Reproduction yielded concrete, repeatable symptoms and failure classes.
+
+### What didn't work
+
+- No direct functional connection path from Snap Chromium to current Surf host installation.
+
+### What was tricky to build
+
+- There are multiple independent blockers. Fixing only manifest path does not solve host executable access or socket namespace mismatch.
+
+## Phase 4: External research and source validation
+
+### Commands run
+
+Used `web.search_query`, `web.open`, and `web.find` to collect primary-source evidence from:
+
+1. Chrome Extensions native messaging docs.
+2. Chromium source docs (`user_data_dir.md`).
+3. Snap docs (`snap-confinement`, `home-interface`).
+4. Launchpad Chromium Snap native-messaging bug discussion.
+5. Firefox portal design doc (as sandboxed native messaging reference model).
+
+### Findings
+
+1. Native host launch is browser-driven; host path rules are strict (absolute path on Linux/macOS).
+2. Chromium config roots can vary via env (`CHROME_CONFIG_HOME`, `XDG_CONFIG_HOME`).
+3. Snap strict confinement and `home` interface rules explain hidden-path access issues.
+4. Historical Chromium Snap bug discussion confirms long-running native messaging friction.
+5. Portal mediation exists in Firefox design docs, but no equivalent proven Chromium path in this investigation.
+
+### What worked
+
+- Sources aligned with local repro and reduced speculative guidance.
+
+### What didn't work
+
+- No single upstream Chromium Snap “drop-in recipe” that solves all Surf-specific needs without app changes.
+
+## Phase 5: Report authoring
+
+### What I wrote
+
+1. Full design doc with:
+   - executive summary,
+   - scope,
+   - evidence-backed current state,
+   - gap analysis,
+   - proposed architecture + pseudocode,
+   - phased implementation plan,
+   - test strategy,
+   - risks/alternatives/open questions,
+   - internal + external references.
+2. This diary with chronological commands and results.
+
+### Why
+
+- User requested a full research report suitable for implementation and distribution.
+
+## Phase 6: Bookkeeping and quality checks
+
+### Commands run
+
+```bash
+docmgr doc relate --doc <design-doc> --file-note "..."
+docmgr doc relate --doc <diary-doc> --file-note "..."
+docmgr changelog update --ticket SURF-20260225-R1 --entry "Completed full research report and diary with evidence-backed recommendations; ready for remarkable upload." --file-note "..."
+# vocabulary cleanup if needed
+docmgr vocab add --category topics --slug architecture --description "Architecture design and system-structure analysis"
+docmgr doctor --ticket SURF-20260225-R1 --stale-after 30
+```
+
+### Findings
+
+- `docmgr doctor` pass required adding `architecture` topic vocabulary.
+
+### What worked
+
+- Doctor checks passed after vocabulary alignment.
+
+### What didn't work
+
+- Initial doctor run would warn if vocabulary topic slugs are missing.
+
+## Phase 7: reMarkable delivery
+
+### Planned commands
+
+```bash
+remarquee status
+remarquee cloud account --non-interactive
+remarquee upload bundle --dry-run <index> <design-doc> <diary> <changelog> <tasks> <readme> \
+  --name "SURF-20260225-R1 Snap Chromium Native Messaging Full Research Report" \
+  --remote-dir "/ai/2026/02/25/SURF-20260225-R1" \
+  --toc-depth 2
+remarquee upload bundle <same files> ...
+remarquee cloud ls /ai/2026/02/25/SURF-20260225-R1 --long --non-interactive
+```
+
+### Delivery status
+
+- Pending at this diary stage. (Upload executed immediately after final validation.)
+
+## Code review instructions
+
+1. Start in the design doc:
+   - `.../design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md`
+2. Validate key repository references:
+   - `scripts/install-native-host.cjs`
+   - `scripts/uninstall-native-host.cjs`
+   - `native/host.cjs`
+   - `native/cli.cjs`
+   - `src/native/port-manager.ts`
+3. Re-run reproduction commands from Phase 3 to confirm behaviors.
+
+## What warrants a second pair of eyes
+
+1. Final socket-path default strategy in mixed Chrome + Snap Chromium environments.
+2. Update/upgrade semantics for copied Snap runtime assets.
+3. Long-term feasibility of portal-based approach for Chromium if ecosystem changes.
+
+## What should be done in the future
+
+1. Implement Phase 1 (shared socket path override) first as low-risk foundation.
+2. Add Snap-aware installer/uninstaller pathing.
+3. Add explicit `surf doctor` diagnostics for native messaging on Linux/Snap.
+4. Add integration test checklist in CI docs for Snap-specific manual verification.
+
+## Related
+
+- Design doc: `../design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md`
+- Ticket index: `../index.md`
+- Changelog: `../changelog.md`
+
+## Phase 8: Implementation kickoff and Task 1 completion
+
+I moved from research into implementation mode by creating a concrete task backlog in the same ticket and then executing Task 1 end-to-end with tests and a code commit. The first implementation goal was to remove hardcoded socket coupling by introducing a shared resolver and env override.
+
+I intentionally completed Task 1 as an isolated change to keep risk low and make review straightforward before touching installer/runtime behavior for Snap in later tasks.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, create tasks in the ticket for implementation, then work task by task, committing at regular intervals, keeping a detailed diary as you go. When you need input from me running in the real browser (in case you can't run tests from the CLI), stop and let me know."
+
+**Assistant interpretation:** Create a task-by-task implementation backlog, execute sequentially with regular commits, and keep this diary updated after each step.
+
+**Inferred user intent:** Controlled, auditable implementation progress with clear checkpoints and explicit request for real-browser help only when required.
+
+**Commit (code):** `fbedaed` — "feat: add configurable surf socket path"
+
+### What I did
+
+1. Replaced research-complete checklist with implementation backlog (`T1`..`T6`) in `tasks.md`.
+2. Added `native/socket-path.cjs` with `getSocketPath()` and `SURF_SOCKET_PATH` override support.
+3. Updated socket usage to read from shared resolver in:
+   - `native/host.cjs`
+   - `native/cli.cjs`
+   - `native/mcp-server.cjs`
+   - `native/do-executor.cjs`
+4. Updated docs:
+   - `README.md` environment variables now include `SURF_SOCKET_PATH`.
+5. Added targeted unit test:
+   - `test/unit/socket-path.test.ts`
+6. Ran targeted tests:
+   - `npm run test -- test/unit/socket-path.test.ts`
+   - `npm run test -- test/unit/do-executor.test.ts`
+
+### Why
+
+- Snap compatibility needs a configurable transport path to avoid hardcoded `/tmp/surf.sock` assumptions.
+- A shared resolver prevents path drift across host/CLI/MCP/workflow components.
+
+### What worked
+
+- New tests passed (`3/3` for socket-path test file).
+- Existing `do-executor` tests remained green (`21/21`), confirming no behavior regression in workflow execution path.
+- Commit captured the task cleanly.
+
+### What didn't work
+
+- N/A for this phase.
+
+### What I learned
+
+- Centralizing socket-path resolution is low-risk and immediately useful beyond Snap support (custom deployments, isolated test environments).
+
+### What was tricky to build
+
+- The only notable risk was missing one socket consumer; search-and-update across all native entrypoints prevented partial adoption.
+
+### What warrants a second pair of eyes
+
+- Whether we should also route any future socket users through the same module by lint/guardrail to avoid reintroducing hardcoded paths.
+
+### What should be done in the future
+
+- Proceed with Task 2 and Task 3 (Snap-aware installer/uninstaller and runtime placement).
+
+### Code review instructions
+
+1. Review shared resolver:
+   - `native/socket-path.cjs`
+2. Review integration points:
+   - `native/host.cjs`
+   - `native/cli.cjs`
+   - `native/mcp-server.cjs`
+   - `native/do-executor.cjs`
+3. Validate tests:
+   - `npm run test -- test/unit/socket-path.test.ts`
+   - `npm run test -- test/unit/do-executor.test.ts`
