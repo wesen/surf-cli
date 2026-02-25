@@ -662,6 +662,8 @@ I ran a fresh live comparison against the currently running extension socket, ca
 
 **Commit (code):** d00cd81 — "feat(surf-go): emit structured json fields from tool responses"
 
+**Related commits:** 7ebbcff (ticket report/evidence), bdef312 (comparison scripts emit frontmatter)
+
 ### What I did
 
 - Re-ran live comparator against Snap socket:
