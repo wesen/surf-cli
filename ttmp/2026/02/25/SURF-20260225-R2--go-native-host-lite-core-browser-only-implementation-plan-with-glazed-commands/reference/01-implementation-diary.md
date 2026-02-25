@@ -611,3 +611,28 @@ node scripts/tests/native-host-installer-smoke.cjs
 1. `SURF_HOST_PROFILE=core-go|node-full` runtime switch is implemented and documented.
 2. Go host is now available as opt-in beta profile (`T7.1` complete).
 3. Remaining rollout tasks (`T7.2`-`T7.4`) depend on real-browser regression feedback and rollout decisions.
+
+## Phase 17 - Added first-class navigation commands to surf-go
+
+### Commands run
+
+```bash
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+cd go && go run ./cmd/surf-go --help
+cd go && go run ./cmd/surf-go navigate --help
+```
+
+### Outputs created
+
+1. `go/internal/cli/commands/navigate.go`
+
+### Files modified
+
+1. `go/cmd/surf-go/main.go`
+
+### Results
+
+1. Added explicit `navigate` command with `--url` (no `--args-json` required).
+2. Added quick navigation helpers: `back`, `forward`, `reload`.
+3. Confirmed command help surfaces correctly and full Go tests pass.

@@ -164,3 +164,12 @@ Confirmed rollout milestone T7.1 is complete via installer/runtime profile suppo
 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Profile-aware wrapper logic
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Profile usage docs for opt-in go-core mode
+
+## 2026-02-25 - Added explicit navigation commands in surf-go
+
+Improved CLI usability by adding first-class `navigate --url` plus quick `back`, `forward`, and `reload` commands so core browsing no longer requires raw JSON args.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Typed navigate command with `--url`
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Command registration for navigate/back/forward/reload

@@ -37,6 +37,16 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	rootCmd.AddCommand(cobraRaw)
 
+	navigateCmd, err := commands.NewNavigateCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraNavigate, err := buildGlazedCommand(navigateCmd)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraNavigate)
+
 	if err := addPageAndInputCommands(rootCmd); err != nil {
 		return nil, err
 	}
@@ -115,6 +125,13 @@ func addPageAndInputCommands(root *cobra.Command) error {
 		{"screenshot", "Capture screenshot", "screenshot"},
 	}
 	if err := addSimpleCommands(root, inputSpecs); err != nil {
+		return err
+	}
+	if err := addSimpleCommands(root, []simpleSpec{
+		{"back", "Navigate back in history", "back"},
+		{"forward", "Navigate forward in history", "forward"},
+		{"reload", "Reload current tab", "tab.reload"},
+	}); err != nil {
 		return err
 	}
 
