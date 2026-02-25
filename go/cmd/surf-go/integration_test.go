@@ -1,0 +1,117 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"io"
+	"net"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/go-go-golems/glazed/pkg/help"
+)
+
+func TestSurfGoPageReadCommandAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+		var req map[string]any
+		if err := json.Unmarshal(line, &req); err != nil {
+			done <- err
+			return
+		}
+		resp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "ok"}},
+			},
+		}
+		b, _ := json.Marshal(resp)
+		_, err = conn.Write(append(b, '\n'))
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"page", "read", "--socket-path", sock, "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
+
+func TestSurfGoNetworkStreamCommandStartStop(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		if _, err := reader.ReadBytes('\n'); err != nil { // stream_request
+			done <- err
+			return
+		}
+		started, _ := json.Marshal(map[string]any{"type": "stream_started", "streamId": 1})
+		_, _ = conn.Write(append(started, '\n'))
+		event, _ := json.Marshal(map[string]any{"type": "network_event", "method": "GET", "url": "https://example.com"})
+		_, _ = conn.Write(append(event, '\n'))
+
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, err = reader.ReadBytes('\n') // stream_stop
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"network", "stream", "--socket-path", sock, "--duration-sec", "1", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("stream command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock stream host failed: %v", err)
+	}
+}

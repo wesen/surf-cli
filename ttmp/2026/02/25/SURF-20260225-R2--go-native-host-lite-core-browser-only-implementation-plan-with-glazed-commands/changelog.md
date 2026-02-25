@@ -144,3 +144,14 @@ Implemented Go host build targets, profile-aware wrapper runtime selection (`SUR
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/uninstall-native-host.cjs — Go host artifact cleanup paths
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/package.json — Added `build:go-host` npm script and packaged `go/` sources
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Runtime profile and migration/fallback documentation
+
+## 2026-02-25 - Added Phase 6 automated verification coverage and manual checklist scaffold
+
+Expanded verification with mapping contract tests, CLI integration tests, and installer smoke tests; added manual browser checklist for final human-in-the-loop validation.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/toolmap_contract_test.go — Core tool mapping parity contract tests
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/integration_test.go — Representative CLI integration tests against mock socket host
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/tests/native-host-installer-smoke.cjs — Installer smoke test for standard + snap Linux targets
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/reference/03-manual-browser-validation-checklist.md — T6.8 manual execution checklist

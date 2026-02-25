@@ -117,13 +117,13 @@
 
 ## Phase 6 - Tests and Validation
 
-- [ ] T6.1: Unit tests for Native Messaging framing.
-- [ ] T6.2: Unit tests for socket transport and disconnect behavior.
-- [ ] T6.3: Unit tests for request correlation/pending maps.
-- [ ] T6.4: Contract tests for core tool mapping parity vs Node.
-- [ ] T6.5: CLI integration tests for representative commands.
-- [ ] T6.6: Stream integration tests (console/network start-stop).
-- [ ] T6.7: Installer tests for standard Linux and Snap targets.
+- [x] T6.1: Unit tests for Native Messaging framing.
+- [x] T6.2: Unit tests for socket transport and disconnect behavior.
+- [x] T6.3: Unit tests for request correlation/pending maps.
+- [x] T6.4: Contract tests for core tool mapping parity vs Node.
+- [x] T6.5: CLI integration tests for representative commands.
+- [x] T6.6: Stream integration tests (console/network start-stop).
+- [x] T6.7: Installer tests for standard Linux and Snap targets.
 - [ ] T6.8: Manual real-browser validation checklist execution.
 
 ## Phase 7 - Rollout

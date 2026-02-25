@@ -25,6 +25,10 @@ RelatedFiles:
       Note: |-
         Phase 0 contract freeze and machine-readable fixture references
         Phase 0 contract freeze summary
+    - Path: ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/reference/03-manual-browser-validation-checklist.md
+      Note: |-
+        Manual browser validation steps for T6.8 execution
+        Manual validation checklist
     - Path: ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/tasks.md
       Note: |-
         Granular implementation backlog for execution
@@ -55,8 +59,9 @@ Deliverables in this ticket:
 1. Plan: `design-doc/01-go-native-host-lite-core-browser-glazed-command-plan.md`
 2. Granular tasks: `tasks.md`
 3. Phase 0 contract freeze: `reference/02-phase-0-contract-inventory-and-freeze.md`
-4. Diary: `reference/01-implementation-diary.md`
-5. Changelog: `changelog.md`
+4. Manual checklist: `reference/03-manual-browser-validation-checklist.md`
+5. Diary: `reference/01-implementation-diary.md`
+6. Changelog: `changelog.md`
 
 ## Status
 

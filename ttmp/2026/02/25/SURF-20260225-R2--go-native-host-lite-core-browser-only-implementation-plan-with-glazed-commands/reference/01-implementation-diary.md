@@ -569,3 +569,37 @@ node --check scripts/build-go-host-binaries.cjs
    - build command `npm run build:go-host`,
    - migration/fallback usage notes for Linux/Snap.
 8. `tasks.md` updated to mark `T5.1` through `T5.7` complete.
+
+## Phase 15 - Added verification suite and manual validation pack (T6.1-T6.7 complete)
+
+### Commands run
+
+```bash
+cd go && go test ./...
+node scripts/tests/native-host-installer-smoke.cjs
+```
+
+### Outputs created
+
+1. `go/internal/host/router/toolmap_contract_test.go`
+2. `go/cmd/surf-go/integration_test.go`
+3. `scripts/tests/native-host-installer-smoke.cjs`
+4. `ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/reference/03-manual-browser-validation-checklist.md`
+
+### Files modified
+
+1. `go/internal/cli/transport/client.go`
+2. `go/internal/cli/transport/client_test.go`
+3. `package.json`
+4. `ttmp/.../index.md`
+
+### Results
+
+1. Confirmed framing tests, socket transport tests, pending correlation tests are in place (`T6.1`-`T6.3`).
+2. Added core mapping contract tests for representative tool routes against frozen parity expectations (`T6.4`).
+3. Added `surf-go` CLI integration tests with a mock unix socket server:
+   - `page read` request/response path,
+   - `network stream` start/stop lifecycle (`T6.5`, `T6.6`).
+4. Added installer smoke test covering Linux standard + Snap targets and uninstall cleanup (`T6.7`).
+5. Added a dedicated manual real-browser checklist doc for `T6.8` execution.
+6. `tasks.md` updated: `T6.1`-`T6.7` complete, `T6.8` pending user-run browser validation.
