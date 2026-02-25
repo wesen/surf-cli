@@ -12,13 +12,18 @@ Topics:
 DocType: index
 Intent: long-term
 Owners: []
-RelatedFiles: []
+RelatedFiles:
+    - Path: ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/02-node-native-host-scope-and-go-migration-feasibility.md
+      Note: New Node-to-Go feasibility report
+    - Path: ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/reference/01-investigation-diary.md
+      Note: Chronological investigation log
 ExternalSources: []
-Summary: "Primary ticket index for full Snap Chromium native messaging research report and delivery artifacts."
+Summary: Primary ticket index for full Snap Chromium native messaging research report and delivery artifacts.
 LastUpdated: 2026-02-25T16:04:46.682582335-05:00
-WhatFor: "Track research deliverables and implementation planning artifacts"
-WhenToUse: "Use when reviewing the Snap Chromium compatibility investigation and plan"
+WhatFor: Track research deliverables and implementation planning artifacts
+WhenToUse: Use when reviewing the Snap Chromium compatibility investigation and plan
 ---
+
 
 # Full research report: Snap Chromium native host compatibility for Surf CLI
 
@@ -34,9 +39,10 @@ This ticket contains a full research report on `surf-cli` native messaging failu
 ## Key Links
 
 1. Primary report: `design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md`
-2. Detailed diary: `reference/01-investigation-diary.md`
-3. Task status: `tasks.md`
-4. Changelog: `changelog.md`
+2. Node/Go feasibility report: `design-doc/02-node-native-host-scope-and-go-migration-feasibility.md`
+3. Detailed diary: `reference/01-investigation-diary.md`
+4. Task status: `tasks.md`
+5. Changelog: `changelog.md`
 
 ## Status
 

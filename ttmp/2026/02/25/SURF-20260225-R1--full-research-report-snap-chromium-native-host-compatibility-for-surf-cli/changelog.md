@@ -75,3 +75,25 @@ Task 5 reached real-browser validation checkpoint. Local syntax/tests/installer 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Verified dual-target install behavior locally
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/uninstall-native-host.cjs — Verified dual-target uninstall behavior locally
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/cli.cjs — Verified new socket-path diagnostics output
+
+## 2026-02-25 - Added Node-vs-Go host feasibility research and continued diary
+
+Captured post-fix disconnect evidence, documented timezone correlation, analyzed native host scope and installer runtime behavior, and added a dedicated Node-to-Go migration feasibility report.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/host.cjs — Evidence for host responsibilities and lifecycle
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Evidence for snap runtime node copy behavior
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/02-node-native-host-scope-and-go-migration-feasibility.md — New research report
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/reference/01-investigation-diary.md — Chronological updates through latest debugging
+
+
+## 2026-02-25 - Uploaded Node-vs-Go research update bundle to reMarkable
+
+Validated docs with docmgr doctor, then uploaded the updated report bundle (including the new Node/Go feasibility report and continued diary) to /ai/2026/02/25/SURF-20260225-R1 and verified cloud listing.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/02-node-native-host-scope-and-go-migration-feasibility.md — Included in uploaded bundle
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/reference/01-investigation-diary.md — Included in uploaded bundle
+

@@ -7,4 +7,5 @@
 - [x] T3: Implement Snap-aware Chromium uninstall cleanup for manifests/runtime artifacts.
 - [x] T4: Improve Linux/Snap diagnostics and docs (README + CLI error hints for mismatch cases).
 - [ ] T5: Validate in local CLI/snap-shell checks and request real-browser verification from user.
-- [ ] T6: Finalize ticket bookkeeping (diary/changelog/tasks) and upload updated implementation log bundle to reMarkable.
+- [x] T6: Finalize ticket bookkeeping (diary/changelog/tasks) and upload updated implementation log bundle to reMarkable.
+- [x] T7: Produce dedicated research doc on Node host scope and Go migration feasibility, then publish updated bundle.

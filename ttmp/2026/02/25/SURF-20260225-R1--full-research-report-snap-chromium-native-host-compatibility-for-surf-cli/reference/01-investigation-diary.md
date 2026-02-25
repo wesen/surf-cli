@@ -506,3 +506,186 @@ I ran local validation checks for syntax, targeted tests, installer/uninstaller 
 ### What should be done in the future
 
 - Run user-assisted browser verification flow and then complete Task 5 and Task 6.
+
+## Phase 11: User-provided post-fix runtime evidence (extension still disconnects)
+
+After the user re-tested in a real browser session, they still observed repeated service-worker disconnect messages.
+
+### Prompt Context
+
+**User prompt (verbatim):**
+
+> I still get 
+> debug.ts:28 [Surf] Connecting to native host...
+> debug.ts:28 [Surf] Native host disconnected: Native host has exited.
+> debug.ts:28 [Surf] Connecting to native host...
+> debug.ts:28 [Surf] Native host disconnected: Native host has exited. in the service worker, after reloading the extension.
+
+**Additional user evidence (verbatim excerpt):**
+
+> 2026-02-25T21:44:18.507Z Host starting...
+> 2026-02-25T21:44:18.511Z Host initialization complete, waiting for connections...
+> 2026-02-25T21:44:18.511Z Socket server listening on /tmp/surf.sock
+> 2026-02-25T21:44:18.512Z Sent HOST_READY to extension
+> 2026-02-25T21:44:18.513Z stdin ended (extension disconnected), notifying clients
+
+### Interpretation
+
+1. Host process does start and emit `HOST_READY`.
+2. Host then sees stdin close almost immediately, which means extension side disconnects after launch.
+3. This is not consistent with a pure “host failed to start” scenario.
+
+### Why this mattered
+
+It narrowed the problem from startup failure to lifecycle/disconnect behavior and environment mismatch.
+
+## Phase 12: Timestamp/time-zone correlation check
+
+The user asked whether timestamp differences might be time-zone related.
+
+### Prompt Context
+
+**User prompt (verbatim):**
+
+> for the record 2026-02-25T21:44:18.507Z ...
+> date
+> Wed Feb 25 04:51:15 PM EST 2026
+> which might be some time zone stuff?
+
+### Interpretation
+
+1. `Z` timestamps in host log are UTC.
+2. User terminal `date` is EST (`UTC-05:00`).
+3. `21:44:18Z` corresponds to `16:44:18 EST` on 2026-02-25.
+
+### Conclusion
+
+Timestamp offset is expected and not itself evidence of the disconnect root cause.
+
+## Phase 13: Node runtime scope + Go migration feasibility investigation
+
+User asked whether installer copies Node into extension and whether a Go version could avoid Node install complexity.
+
+### Prompt Context
+
+**User prompt (verbatim):**
+
+> so the installer script copies node into the extension folder?
+>
+> ok, this node script, how much does it do and can we maybe make a go version so we don't have to deal with installing a whole node?
+
+### Commands run
+
+```bash
+rg --files native scripts | sort
+wc -l native/*.cjs scripts/install-native-host.cjs scripts/uninstall-native-host.cjs
+sed -n '1,260p' native/host.cjs
+sed -n '260,620p' native/host.cjs
+sed -n '620,1040p' native/host.cjs
+sed -n '1040,1668p' native/host.cjs
+sed -n '1,260p' native/cli.cjs
+cat package.json
+rg -n "function writeMessage|function processInput|HOST_READY|process.stdin.on\(\"end\"|const server = net.createServer|function handleToolRequest" native/host.cjs
+rg -n "if \(extensionMsg\.type === \"(CHATGPT_QUERY|PERPLEXITY_QUERY|GEMINI_QUERY|GROK_QUERY|GROK_VALIDATE|AISTUDIO_QUERY|AISTUDIO_BUILD|AI_ANALYZE)\"\)" native/host.cjs
+nl -ba scripts/install-native-host.cjs | sed -n '1,220p'
+nl -ba scripts/install-native-host.cjs | sed -n '220,420p'
+nl -ba native/socket-path.cjs
+nl -ba native/protocol.cjs
+git status --short
+git diff -- scripts/install-native-host.cjs
+```
+
+### Findings
+
+1. The installer does **not** copy Node into extension files.
+2. For Linux Chromium Snap target, installer copies Node and runtime package under `~/snap/chromium/common/surf-cli/...` and writes a snap-side wrapper/manifest.
+3. The host runtime (`native/host.cjs`) is large and multi-responsibility, including provider automation clients and transport orchestration.
+
+### Key evidence
+
+1. Snap runtime copy behavior: `scripts/install-native-host.cjs:134-171`, `:281-297`.
+2. Node host responsibilities and size: `native/host.cjs` (~1668 LOC), provider handler branches at `:399`, `:454`, `:555`, `:649`, `:722`, `:842`, `:919`, `:1034`.
+3. Extension disconnect handling: `native/host.cjs:1506-1520`.
+
+### Outcome
+
+Prepared recommendation for phased migration:
+
+1. short-term packaging/runtime hardening,
+2. medium-term Go host lite for transport + core actions,
+3. long-term provider parity or sidecar model.
+
+## Phase 14: Ticket deliverable work for Node-vs-Go research + upload request
+
+The user requested a dedicated research doc in the ticket, updated diary, and reMarkable upload.
+
+### Prompt Context
+
+**User prompt (verbatim):**
+
+> Create a research doc in the ticket and upload to remarkable. Also keep diary entries for all the stuff we did so far.
+
+### What I did
+
+1. Loaded skill workflow and writing/checklist references:
+   - `/home/manuel/.codex/skills/ticket-research-docmgr-remarkable/SKILL.md`
+   - `references/writing-style.md`
+   - `references/deliverable-checklist.md`
+2. Added design doc:
+   - `docmgr doc add --ticket SURF-20260225-R1 --doc-type design-doc --title "Node Native Host Scope and Go Migration Feasibility"`
+3. Drafted full evidence-based design report in:
+   - `design-doc/02-node-native-host-scope-and-go-migration-feasibility.md`
+4. Appended this diary with Phases 11-14.
+
+### Pending after this phase
+
+1. Update ticket index/tasks/changelog and relate files.
+2. Run `docmgr doctor --ticket SURF-20260225-R1 --stale-after 30`.
+3. Run reMarkable dry-run bundle upload, then real upload, then verify cloud listing.
+
+## Phase 15: Validation + reMarkable delivery completion
+
+Completed the publication workflow requested by the user.
+
+### Commands run
+
+```bash
+docmgr doctor --ticket SURF-20260225-R1 --stale-after 30
+remarquee status
+remarquee cloud account --non-interactive
+remarquee upload bundle --dry-run \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/02-node-native-host-scope-and-go-migration-feasibility.md \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/reference/01-investigation-diary.md \
+  --name "SURF-20260225-R1-research-update-node-go-feasibility" \
+  --remote-dir "/ai/2026/02/25/SURF-20260225-R1" \
+  --toc-depth 2
+remarquee upload bundle \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/01-snap-chromium-native-messaging-compatibility-research-report.md \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/design-doc/02-node-native-host-scope-and-go-migration-feasibility.md \
+  ttmp/2026/02/25/SURF-20260225-R1--full-research-report-snap-chromium-native-host-compatibility-for-surf-cli/reference/01-investigation-diary.md \
+  --name "SURF-20260225-R1-research-update-node-go-feasibility" \
+  --remote-dir "/ai/2026/02/25/SURF-20260225-R1" \
+  --toc-depth 2
+remarquee cloud ls /ai/2026/02/25/SURF-20260225-R1 --long --non-interactive
+```
+
+### Results
+
+1. `docmgr doctor` passed (`All checks passed`).
+2. Dry-run bundle upload succeeded.
+3. Real bundle upload succeeded:
+   - `OK: uploaded SURF-20260225-R1-research-update-node-go-feasibility.pdf -> /ai/2026/02/25/SURF-20260225-R1`
+4. Cloud listing confirms presence of both report bundles:
+   - `SURF-20260225-R1 Snap Chromium Native Messaging Full Research Report`
+   - `SURF-20260225-R1-research-update-node-go-feasibility`
+
+### Bookkeeping updates completed
+
+1. Added new design doc link in ticket `index.md`.
+2. Updated tasks (`T6`, `T7`) to complete.
+3. Added changelog entries for research update and upload verification.
+
+### Remaining open work
+
+1. `T5` remains open pending additional real-browser validation to close the disconnect loop.
