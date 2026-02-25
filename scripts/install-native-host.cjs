@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execSync, spawnSync } = require("child_process");
+const { execSync } = require("child_process");
 
 const HOST_NAME = "surf.browser.host";
 
@@ -34,8 +34,7 @@ const BROWSERS = {
   },
   arc: {
     name: "Arc",
-    darwin:
-      "Library/Application Support/Arc/User Data/NativeMessagingHosts",
+    darwin: "Library/Application Support/Arc/User Data/NativeMessagingHosts",
     linux: null,
     win32: null,
   },
@@ -48,15 +47,8 @@ const BROWSERS = {
 };
 
 const NODE_PATHS = {
-  darwin: [
-    "/opt/homebrew/bin/node",
-    "/usr/local/bin/node",
-    "/usr/bin/node",
-  ],
-  linux: [
-    "/usr/bin/node",
-    "/usr/local/bin/node",
-  ],
+  darwin: ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"],
+  linux: ["/usr/bin/node", "/usr/local/bin/node"],
   win32: [
     "C:\\Program Files\\nodejs\\node.exe",
     "C:\\Program Files (x86)\\nodejs\\node.exe",
@@ -97,7 +89,10 @@ function getWrapperDir() {
     case "linux":
       return path.join(home, ".local/share/surf-cli");
     case "win32":
-      return path.join(process.env.LOCALAPPDATA || path.join(home, "AppData/Local"), "surf-cli");
+      return path.join(
+        process.env.LOCALAPPDATA || path.join(home, "AppData/Local"),
+        "surf-cli"
+      );
     default:
       return null;
   }
@@ -117,41 +112,89 @@ function getHostPath() {
   return null;
 }
 
-function createWrapper(wrapperDir, nodePath, hostPath) {
+function getChromiumSnapRoot() {
+  if (process.platform !== "linux") return null;
+  const root = path.join(os.homedir(), "snap/chromium/common");
+  return fs.existsSync(root) ? root : null;
+}
+
+function detectHostPackageRoot(hostPath) {
+  const nativeDir = path.dirname(hostPath);
+  const packageRoot = path.dirname(nativeDir);
+  if (
+    fs.existsSync(path.join(packageRoot, "package.json")) &&
+    fs.existsSync(path.join(packageRoot, "native", "host.cjs"))
+  ) {
+    return packageRoot;
+  }
+  return null;
+}
+
+function prepareSnapRuntime(wrapperDir, nodePath, hostPath) {
+  const packageRoot = detectHostPackageRoot(hostPath);
+  if (!packageRoot) {
+    throw new Error(
+      `Could not determine Surf package root from host path: ${hostPath}. Set SURF_HOST_PATH to a standard surf-cli native/host.cjs path.`
+    );
+  }
+
+  const runtimeRoot = path.join(wrapperDir, "runtime");
+  const runtimePackageRoot = path.join(runtimeRoot, "surf-cli");
+  const runtimeNodePath = path.join(wrapperDir, "node");
+  const runtimeHostPath = path.join(runtimePackageRoot, "native", "host.cjs");
+  const runtimeSocketPath = path.join(wrapperDir, "surf.sock");
+
+  fs.mkdirSync(wrapperDir, { recursive: true });
+  fs.rmSync(runtimeRoot, { recursive: true, force: true });
+  fs.mkdirSync(runtimeRoot, { recursive: true });
+
+  fs.cpSync(packageRoot, runtimePackageRoot, { recursive: true });
+  try {
+    fs.copyFileSync(nodePath, runtimeNodePath);
+    fs.chmodSync(runtimeNodePath, "755");
+  } catch (e) {
+    // If a previous snap wrapper is actively executing this node binary, keep it.
+    if (!(e && e.code === "ETXTBSY" && fs.existsSync(runtimeNodePath))) {
+      throw e;
+    }
+  }
+
+  return {
+    nodePath: runtimeNodePath,
+    hostPath: runtimeHostPath,
+    socketPath: runtimeSocketPath,
+  };
+}
+
+function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
   const platform = process.platform;
   fs.mkdirSync(wrapperDir, { recursive: true });
 
   if (platform === "win32") {
     const batPath = path.join(wrapperDir, "host-wrapper.bat");
-    const content = `@echo off\r\n"${nodePath}" "${hostPath}"\r\n`;
+    const envLine = options.socketPath
+      ? `set SURF_SOCKET_PATH=${options.socketPath}\r\n`
+      : "";
+    const content = `@echo off\r\n${envLine}"${nodePath}" "${hostPath}"\r\n`;
     fs.writeFileSync(batPath, content);
     return batPath;
-  } else {
-    const shPath = path.join(wrapperDir, "host-wrapper.sh");
-    const hostDir = path.dirname(hostPath);
-    const content = `#!/bin/bash
-cd "${hostDir}"
+  }
+
+  const shPath = path.join(wrapperDir, "host-wrapper.sh");
+  const hostDir = path.dirname(hostPath);
+  const envLine = options.socketPath
+    ? `export SURF_SOCKET_PATH=\"${options.socketPath}\"\n`
+    : "";
+  const content = `#!/bin/bash
+${envLine}cd "${hostDir}"
 exec "${nodePath}" "${hostPath}"
 `;
-    fs.writeFileSync(shPath, content);
-    fs.chmodSync(shPath, "755");
-    return shPath;
-  }
+  fs.writeFileSync(shPath, content);
+  fs.chmodSync(shPath, "755");
+  return shPath;
 }
 
-function installManifest(browser, extensionId, wrapperPath) {
-  const platform = process.platform;
-  const browserConfig = BROWSERS[browser];
-
-  if (!browserConfig || !browserConfig[platform]) {
-    return null;
-  }
-
-  if (platform === "win32") {
-    return installWindowsRegistry(browser, extensionId, wrapperPath);
-  }
-
-  const manifestDir = path.join(os.homedir(), browserConfig[platform]);
+function writeManifest(manifestDir, extensionId, wrapperPath) {
   fs.mkdirSync(manifestDir, { recursive: true });
 
   const manifest = {
@@ -193,6 +236,80 @@ function installWindowsRegistry(browser, extensionId, wrapperPath) {
     console.error(`Failed to add registry entry: ${e.message}`);
     return null;
   }
+}
+
+function installForBrowser(browser, extensionId, nodePath, hostPath) {
+  const platform = process.platform;
+  const browserConfig = BROWSERS[browser];
+
+  if (!browserConfig || !browserConfig[platform]) {
+    return { installed: [], skipped: [BROWSERS[browser]?.name || browser], hints: [] };
+  }
+
+  if (platform === "win32") {
+    const wrapperPath = createWrapper(getWrapperDir(), nodePath, hostPath);
+    const manifestPath = installWindowsRegistry(browser, extensionId, wrapperPath);
+    if (!manifestPath) return { installed: [], skipped: [browserConfig.name], hints: [] };
+    return {
+      installed: [{ browser: browserConfig.name, path: manifestPath }],
+      skipped: [],
+      hints: [],
+    };
+  }
+
+  const installed = [];
+  const skipped = [];
+  const hints = [];
+
+  const standardWrapperDir = getWrapperDir();
+  const standardManifestDir = path.join(os.homedir(), browserConfig[platform]);
+
+  if (browser === "chromium" && platform === "linux") {
+    try {
+      const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath);
+      const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
+      installed.push({ browser: browserConfig.name, path: manifestPath });
+    } catch (e) {
+      skipped.push(browserConfig.name);
+      hints.push(`Failed standard Chromium install target: ${e.message}`);
+    }
+
+    const snapRoot = getChromiumSnapRoot();
+    if (snapRoot) {
+      const snapWrapperDir = path.join(snapRoot, "surf-cli");
+      const snapManifestDir = path.join(snapRoot, "chromium", "NativeMessagingHosts");
+      try {
+        const snapRuntime = prepareSnapRuntime(snapWrapperDir, nodePath, hostPath);
+        const snapWrapperPath = createWrapper(
+          snapWrapperDir,
+          snapRuntime.nodePath,
+          snapRuntime.hostPath,
+          { socketPath: snapRuntime.socketPath }
+        );
+        const snapManifestPath = writeManifest(snapManifestDir, extensionId, snapWrapperPath);
+        installed.push({ browser: `${browserConfig.name} (snap)`, path: snapManifestPath });
+        hints.push(
+          `Snap target installed. Set SURF_SOCKET_PATH=${snapRuntime.socketPath} in your shell when using surf CLI outside snap.`
+        );
+      } catch (e) {
+        skipped.push(`${browserConfig.name} (snap)`);
+        hints.push(`Failed snap Chromium install target: ${e.message}`);
+      }
+    }
+
+    return { installed, skipped, hints };
+  }
+
+  try {
+    const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath);
+    const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
+    installed.push({ browser: browserConfig.name, path: manifestPath });
+  } catch (e) {
+    skipped.push(browserConfig.name);
+    hints.push(`Failed ${browserConfig.name} install target: ${e.message}`);
+  }
+
+  return { installed, skipped, hints };
 }
 
 function parseArgs() {
@@ -245,7 +362,9 @@ function main() {
 
   if (!extensionId) {
     console.error("Error: Extension ID required");
-    console.error("Usage: install-native-host.cjs <extension-id> [--browser chrome|chromium|brave|edge|arc|helium|all]");
+    console.error(
+      "Usage: install-native-host.cjs <extension-id> [--browser chrome|chromium|brave|edge|arc|helium|all]"
+    );
     console.error("\nFind your extension ID at chrome://extensions (enable Developer Mode)");
     process.exit(1);
   }
@@ -276,18 +395,20 @@ function main() {
     process.exit(1);
   }
 
+  const snapRoot = getChromiumSnapRoot();
+
   console.log(`Platform: ${process.platform}`);
   console.log(`Node: ${nodePath}`);
   console.log(`Host: ${hostPath}`);
   console.log(`Wrapper dir: ${wrapperDir}`);
-  console.log("");
-
-  const wrapperPath = createWrapper(wrapperDir, nodePath, hostPath);
-  console.log(`Created wrapper: ${wrapperPath}`);
+  if (snapRoot) {
+    console.log(`Chromium snap root detected: ${snapRoot}`);
+  }
   console.log("");
 
   const installed = [];
   const skipped = [];
+  const hints = [];
 
   for (const browser of browsers) {
     if (!BROWSERS[browser]) {
@@ -295,12 +416,10 @@ function main() {
       continue;
     }
 
-    const result = installManifest(browser, extensionId, wrapperPath);
-    if (result) {
-      installed.push({ browser: BROWSERS[browser].name, path: result });
-    } else {
-      skipped.push(BROWSERS[browser].name);
-    }
+    const result = installForBrowser(browser, extensionId, nodePath, hostPath);
+    installed.push(...result.installed);
+    skipped.push(...result.skipped);
+    hints.push(...result.hints);
   }
 
   if (installed.length > 0) {
@@ -311,7 +430,14 @@ function main() {
   }
 
   if (skipped.length > 0) {
-    console.log(`\nSkipped (not supported on ${process.platform}): ${skipped.join(", ")}`);
+    console.log(`\nSkipped (failed/unsupported on ${process.platform}): ${skipped.join(", ")}`);
+  }
+
+  if (hints.length > 0) {
+    console.log("\nHints:");
+    for (const hint of hints) {
+      console.log(`  - ${hint}`);
+    }
   }
 
   console.log("\nDone! Restart your browser for changes to take effect.");
