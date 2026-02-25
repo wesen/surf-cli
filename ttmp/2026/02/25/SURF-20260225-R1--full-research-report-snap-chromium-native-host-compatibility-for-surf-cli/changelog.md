@@ -40,3 +40,28 @@ Completed implementation Task 1: introduced shared socket-path resolution with `
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/mcp-server.cjs — MCP server now reads socket path from shared resolver
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/do-executor.cjs — Workflow executor now reads socket path from shared resolver
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/test/unit/socket-path.test.ts — Added tests for override/default behavior
+
+## 2026-02-25
+
+Completed implementation Task 2: added snap-aware Chromium install targets including snap runtime staging, snap manifest install path, and snap socket-path wrapper export. (commit `cf9cba6`)
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Added dual Linux Chromium targets and snap runtime setup
+
+## 2026-02-25
+
+Completed implementation Task 3: added snap-aware Chromium uninstall cleanup for manifests and snap wrapper directory artifacts. (commit `f5f170d`)
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/uninstall-native-host.cjs — Added multi-path Chromium cleanup (standard + snap)
+
+## 2026-02-25
+
+Completed implementation Task 4: improved CLI diagnostics and README guidance for Snap socket mismatch handling. (commit `b7ff64a`)
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/cli.cjs — Added socket-path output and snap-specific hint on connection errors
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Added `SURF_SOCKET_PATH` usage guidance for Snap Chromium

@@ -13,18 +13,23 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: README.md
+      Note: Diary includes updated snap socket guidance and diagnostics usage
     - Path: native/cli.cjs
       Note: Diary captures CLI error outcomes from socket connection failures
     - Path: native/host.cjs
       Note: Diary captures socket and host lifecycle evidence from this runtime
     - Path: scripts/install-native-host.cjs
       Note: Commands and outcomes depend on installer path/wrapper logic
+    - Path: scripts/uninstall-native-host.cjs
+      Note: Diary includes snap-aware uninstall implementation and validation
 ExternalSources: []
 Summary: Chronological command log and reasoning trail for full Snap Chromium compatibility research and report delivery.
 LastUpdated: 2026-02-25T16:04:46.979814202-05:00
 WhatFor: Preserve reproducible investigation history for future implementation
 WhenToUse: Use to reproduce findings and verify assumptions during implementation
 ---
+
 
 
 # Investigation Diary
@@ -347,3 +352,113 @@ I intentionally completed Task 1 as an isolated change to keep risk low and make
 3. Validate tests:
    - `npm run test -- test/unit/socket-path.test.ts`
    - `npm run test -- test/unit/do-executor.test.ts`
+
+## Phase 9: Tasks 2-4 implementation (Snap install/uninstall + diagnostics)
+
+I completed the next three tasks as separate commits to keep review and rollback easy: installer support, uninstaller support, and user-facing diagnostics/docs. Each change was validated locally with script checks and runtime probes.
+
+This phase intentionally focused on deterministic file/runtime path handling and guidance; it does not yet include full real-browser end-to-end verification, which is tracked in Task 5.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Phase 8)
+
+**Assistant interpretation:** Continue sequential task execution with regular commits and detailed diary updates.
+
+**Inferred user intent:** Deliver implementation progress in small, auditable increments.
+
+**Commit (code):**
+- `cf9cba6` — "feat: add snap-aware chromium install targets"
+- `f5f170d` — "feat: add snap-aware chromium uninstall cleanup"
+- `b7ff64a` — "docs: add snap socket diagnostics and guidance"
+
+### What I did
+
+1. Task 2 (`cf9cba6`) in `scripts/install-native-host.cjs`:
+   - Added snap-root detection for Chromium (`~/snap/chromium/common`).
+   - Added dual-target install for Linux Chromium:
+     - standard manifest target (`~/.config/chromium/...`)
+     - snap manifest target (`~/snap/chromium/common/chromium/...`)
+   - Added snap runtime preparation:
+     - copies surf package runtime into `~/snap/chromium/common/surf-cli/runtime/surf-cli`
+     - copies node binary to `~/snap/chromium/common/surf-cli/node`
+     - writes snap wrapper exporting `SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock`
+   - Added installer hint instructing CLI socket env export for non-snap shell usage.
+
+2. Task 3 (`f5f170d`) in `scripts/uninstall-native-host.cjs`:
+   - Added multi-path manifest removal for Linux Chromium:
+     - standard + snap manifest paths.
+   - Added snap wrapper directory cleanup (`~/snap/chromium/common/surf-cli`) when `--all`.
+
+3. Task 4 (`b7ff64a`) in `native/cli.cjs` and `README.md`:
+   - CLI now prints effective socket path on connection errors.
+   - Added snap-specific hint if snap Chromium manifest is present and socket path is default.
+   - README updated with:
+     - `SURF_SOCKET_PATH` use case guidance,
+     - Linux snap note in install section,
+     - socket override guidance for snap Chromium users.
+
+### Why
+
+- Installer/uninstaller needed first-class snap path awareness to avoid manual manifest/runtime copying.
+- Error diagnostics needed to surface the hidden socket mismatch root cause directly to users.
+
+### What worked
+
+1. Script syntax checks:
+   - `node --check scripts/install-native-host.cjs`
+   - `node --check scripts/uninstall-native-host.cjs`
+2. Installer validation:
+   - `node scripts/install-native-host.cjs <extension-id> --browser chromium`
+   - confirmed creation of both manifests (standard + snap).
+   - confirmed snap wrapper runtime paths and socket export.
+3. Snap wrapper runtime probe:
+   - `snap run --shell chromium -c '/home/manuel/snap/chromium/common/surf-cli/host-wrapper.sh ...'`
+   - returned `EXIT:0` with HOST_READY payload bytes.
+4. Uninstaller validation:
+   - `node scripts/uninstall-native-host.cjs --browser chromium`
+   - removed both standard + snap manifests.
+5. Targeted tests still pass:
+   - `npm run test -- test/unit/socket-path.test.ts`
+   - `npm run test -- test/unit/do-executor.test.ts`
+6. CLI diagnostics probe:
+   - `node native/cli.cjs tab.list`
+   - now outputs socket path + snap hint.
+
+### What didn't work
+
+- During early install-script iteration, snap runtime node copy hit:
+  - `ETXTBSY: text file is busy, copyfile '/usr/bin/node' -> '.../snap/chromium/common/surf-cli/node'`
+- I fixed it by treating `ETXTBSY` as non-fatal when target node already exists.
+
+### What I learned
+
+- In active sessions, replacing a currently executing snap-side node binary can fail; installer must tolerate that while preserving functional runtime.
+
+### What was tricky to build
+
+- The install pipeline had to support both “regular Linux Chromium” and “Snap Chromium” simultaneously without breaking existing behavior.
+- The most fragile point was runtime staging and wrapper generation order (copy runtime first, then wrapper, then manifest).
+
+### What warrants a second pair of eyes
+
+- Whether snap runtime staging should eventually avoid full package copy (size/perf tradeoff) in favor of slimmer runtime artifacts.
+- Whether `--all` semantics in uninstaller should continue removing all browser targets when combined with `--browser`.
+
+### What should be done in the future
+
+- Execute Task 5 real-browser verification with user assistance to confirm extension-side connect/disconnect behavior and command execution.
+
+### Code review instructions
+
+1. Installer changes:
+   - `scripts/install-native-host.cjs`
+2. Uninstaller changes:
+   - `scripts/uninstall-native-host.cjs`
+3. Diagnostics/docs:
+   - `native/cli.cjs`
+   - `README.md`
+4. Validation commands:
+   - `node scripts/install-native-host.cjs <extension-id> --browser chromium`
+   - `node scripts/uninstall-native-host.cjs --browser chromium`
+   - `node native/cli.cjs tab.list`
