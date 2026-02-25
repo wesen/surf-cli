@@ -107,13 +107,13 @@
 
 ## Phase 5 - Compatibility, Packaging, and Installer
 
-- [ ] T5.1: Add Go host binary build target (linux/mac/windows).
-- [ ] T5.2: Add host profile flag/environment (`SURF_HOST_PROFILE=core-go|node-full`).
-- [ ] T5.3: Update installer to install and reference Go host wrapper.
-- [ ] T5.4: Keep Node host fallback path selectable.
-- [ ] T5.5: Add Snap-aware Go host install target parity.
-- [ ] T5.6: Update uninstall script for Go artifacts.
-- [ ] T5.7: Document migration and fallback behavior in README.
+- [x] T5.1: Add Go host binary build target (linux/mac/windows).
+- [x] T5.2: Add host profile flag/environment (`SURF_HOST_PROFILE=core-go|node-full`).
+- [x] T5.3: Update installer to install and reference Go host wrapper.
+- [x] T5.4: Keep Node host fallback path selectable.
+- [x] T5.5: Add Snap-aware Go host install target parity.
+- [x] T5.6: Update uninstall script for Go artifacts.
+- [x] T5.7: Document migration and fallback behavior in README.
 
 ## Phase 6 - Tests and Validation
 

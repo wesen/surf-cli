@@ -520,3 +520,52 @@ cd go && go run ./cmd/surf-go network stream --help
 5. Verified command surfacing via help output.
 6. `go test ./...` passed.
 7. `tasks.md` updated to mark `T4.17` through `T4.34` complete.
+
+## Phase 14 - Installer/profile packaging updates for Go host rollout (T5.1-T5.7)
+
+### Commands run
+
+```bash
+node scripts/install-native-host.cjs --help
+node scripts/uninstall-native-host.cjs --help
+node scripts/build-go-host-binaries.cjs
+cd go && go test ./...
+node --check scripts/install-native-host.cjs
+node --check scripts/uninstall-native-host.cjs
+node --check scripts/build-go-host-binaries.cjs
+```
+
+### Outputs created
+
+1. `scripts/build-go-host-binaries.cjs`
+
+### Files modified
+
+1. `scripts/install-native-host.cjs`
+2. `scripts/uninstall-native-host.cjs`
+3. `package.json`
+4. `README.md`
+
+### Results
+
+1. Added cross-platform Go host build target script (`build-go-host-binaries.cjs`) building:
+   - `linux/$GOARCH`,
+   - `darwin/$GOARCH`,
+   - `windows/$GOARCH`.
+2. Installer now supports optional Go host runtime build/install:
+   - detects Go toolchain via `SURF_GO_PATH` or PATH,
+   - builds `surf-host-go` into wrapper dirs when source/toolchain are available,
+   - wraps runtime with profile selection.
+3. Added runtime profile switch in generated wrappers:
+   - `SURF_HOST_PROFILE=node-full` (default fallback),
+   - `SURF_HOST_PROFILE=core-go` (prefer `surf-host-go` when installed).
+4. Preserved node fallback selection path when Go host is unavailable or fails to build.
+5. Added Snap-aware parity for Go host wrapper:
+   - builds snap-local `surf-host-go` in snap wrapper dir,
+   - keeps snap socket export behavior intact.
+6. Uninstaller now removes Go host artifacts (`surf-host-go`, `surf-host-go.exe`) from wrapper dirs.
+7. README updated with:
+   - `SURF_HOST_PROFILE` and `SURF_GO_PATH`,
+   - build command `npm run build:go-host`,
+   - migration/fallback usage notes for Linux/Snap.
+8. `tasks.md` updated to mark `T5.1` through `T5.7` complete.

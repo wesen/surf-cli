@@ -151,6 +151,31 @@ function removeWrapperDirs(allBrowsers) {
   return removed;
 }
 
+function removeGoArtifacts(targetBrowsers) {
+  const removed = [];
+  const wrapperDirs = [];
+
+  const defaultWrapperDir = getWrapperDir();
+  if (defaultWrapperDir) wrapperDirs.push(defaultWrapperDir);
+
+  if (process.platform === "linux" && targetBrowsers.includes("chromium")) {
+    const snapRoot = getChromiumSnapRoot();
+    if (snapRoot) wrapperDirs.push(path.join(snapRoot, "surf-cli"));
+  }
+
+  for (const dir of wrapperDirs) {
+    for (const file of ["surf-host-go", "surf-host-go.exe"]) {
+      const p = path.join(dir, file);
+      try {
+        fs.unlinkSync(p);
+        removed.push(p);
+      } catch {}
+    }
+  }
+
+  return removed;
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = { browsers: ["chrome"], all: false };
@@ -228,6 +253,14 @@ function main() {
 
   if (notFound.length > 0) {
     console.log(`\nNot found: ${notFound.join(", ")}`);
+  }
+
+  const removedGoArtifacts = removeGoArtifacts(browsers);
+  if (removedGoArtifacts.length > 0) {
+    console.log("\nRemoved Go host artifacts:");
+    for (const p of removedGoArtifacts) {
+      console.log(`  ${p}`);
+    }
   }
 
   if (all) {

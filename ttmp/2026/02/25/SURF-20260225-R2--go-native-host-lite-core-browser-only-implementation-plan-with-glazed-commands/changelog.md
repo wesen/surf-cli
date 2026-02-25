@@ -132,3 +132,15 @@ Completed surf-go command coverage for tabs/windows/frames/dialog plus network/c
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client.go — Stream transport support (`stream_request`/`stream_stop` lifecycle)
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client_test.go — Stream transport test coverage
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Registration of remaining core command groups
+
+## 2026-02-25 - Added Go host profile packaging + installer/uninstaller updates (T5.1-T5.7)
+
+Implemented Go host build targets, profile-aware wrapper runtime selection (`SURF_HOST_PROFILE=core-go|node-full`), snap-aware Go host install parity, uninstall cleanup for Go artifacts, and migration/fallback documentation updates.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/build-go-host-binaries.cjs — Cross-platform Go host binary build script
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Profile-aware wrapper generation and Go host build/install integration
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/uninstall-native-host.cjs — Go host artifact cleanup paths
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/package.json — Added `build:go-host` npm script and packaged `go/` sources
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Runtime profile and migration/fallback documentation

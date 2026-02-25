@@ -55,20 +55,48 @@ const NODE_PATHS = {
   ],
 };
 
+const GO_PATHS = {
+  darwin: ["/opt/homebrew/bin/go", "/usr/local/bin/go", "/usr/bin/go"],
+  linux: ["/usr/bin/go", "/usr/local/bin/go"],
+  win32: [
+    "C:\\Program Files\\Go\\bin\\go.exe",
+    "C:\\Program Files (x86)\\Go\\bin\\go.exe",
+  ],
+};
+
 function findNode() {
   if (process.env.SURF_NODE_PATH && fs.existsSync(process.env.SURF_NODE_PATH)) {
     return process.env.SURF_NODE_PATH;
   }
+  try {
+    const platform = process.platform;
+    const which = platform === "win32" ? "where" : "which";
+    const result = execSync(`${which} node`, { encoding: "utf8" }).trim();
+    if (result) return result.split("\n")[0];
+  } catch {}
   const platform = process.platform;
   const paths = NODE_PATHS[platform] || [];
   for (const p of paths) {
     if (fs.existsSync(p)) return p;
   }
+  return null;
+}
+
+function findGo() {
+  if (process.env.SURF_GO_PATH && fs.existsSync(process.env.SURF_GO_PATH)) {
+    return process.env.SURF_GO_PATH;
+  }
   try {
+    const platform = process.platform;
     const which = platform === "win32" ? "where" : "which";
-    const result = execSync(`${which} node`, { encoding: "utf8" }).trim();
+    const result = execSync(`${which} go`, { encoding: "utf8" }).trim();
     if (result) return result.split("\n")[0];
   } catch {}
+  const platform = process.platform;
+  const paths = GO_PATHS[platform] || [];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
   return null;
 }
 
@@ -130,6 +158,38 @@ function detectHostPackageRoot(hostPath) {
   return null;
 }
 
+function buildGoHostBinary(wrapperDir, packageRoot) {
+  const goPath = findGo();
+  if (!goPath) {
+    return { path: null, hint: "Go toolchain not found; core-go profile will be unavailable." };
+  }
+
+  const goRoot = path.join(packageRoot, "go");
+  const goMain = path.join(goRoot, "cmd", "surf-host-go", "main.go");
+  if (!fs.existsSync(goMain)) {
+    return { path: null, hint: "Go host source not found in package; core-go profile unavailable." };
+  }
+
+  fs.mkdirSync(wrapperDir, { recursive: true });
+  const binaryName = process.platform === "win32" ? "surf-host-go.exe" : "surf-host-go";
+  const outputPath = path.join(wrapperDir, binaryName);
+
+  try {
+    execSync(`"${goPath}" build -o "${outputPath}" ./cmd/surf-host-go`, {
+      cwd: goRoot,
+      stdio: "pipe",
+      env: { ...process.env, CGO_ENABLED: "0" },
+    });
+    if (process.platform !== "win32") fs.chmodSync(outputPath, "755");
+    return { path: outputPath, hint: null };
+  } catch (e) {
+    return {
+      path: null,
+      hint: `Failed to build Go host binary (${e.message}). Falling back to node-full profile.`,
+    };
+  }
+}
+
 function prepareSnapRuntime(wrapperDir, nodePath, hostPath) {
   const packageRoot = detectHostPackageRoot(hostPath);
   if (!packageRoot) {
@@ -140,7 +200,7 @@ function prepareSnapRuntime(wrapperDir, nodePath, hostPath) {
 
   const runtimeRoot = path.join(wrapperDir, "runtime");
   const runtimePackageRoot = path.join(runtimeRoot, "surf-cli");
-  const runtimeNodePath = path.join(wrapperDir, "node");
+  const runtimeNodePath = path.join(wrapperDir, `node-${Date.now()}`);
   const runtimeHostPath = path.join(runtimePackageRoot, "native", "host.cjs");
   const runtimeSocketPath = path.join(wrapperDir, "surf.sock");
 
@@ -149,20 +209,24 @@ function prepareSnapRuntime(wrapperDir, nodePath, hostPath) {
   fs.mkdirSync(runtimeRoot, { recursive: true });
 
   fs.cpSync(packageRoot, runtimePackageRoot, { recursive: true });
-  try {
-    fs.copyFileSync(nodePath, runtimeNodePath);
-    fs.chmodSync(runtimeNodePath, "755");
-  } catch (e) {
-    // If a previous snap wrapper is actively executing this node binary, keep it.
-    if (!(e && e.code === "ETXTBSY" && fs.existsSync(runtimeNodePath))) {
-      throw e;
-    }
+  fs.copyFileSync(nodePath, runtimeNodePath);
+  fs.chmodSync(runtimeNodePath, "755");
+
+  // Best-effort cleanup for previous node copies; ignore busy files.
+  for (const entry of fs.readdirSync(wrapperDir)) {
+    if (!/^node(?:-\d+)?$/.test(entry)) continue;
+    const oldPath = path.join(wrapperDir, entry);
+    if (oldPath === runtimeNodePath) continue;
+    try {
+      fs.unlinkSync(oldPath);
+    } catch {}
   }
 
   return {
     nodePath: runtimeNodePath,
     hostPath: runtimeHostPath,
     socketPath: runtimeSocketPath,
+    packageRoot: runtimePackageRoot,
   };
 }
 
@@ -175,7 +239,10 @@ function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
     const envLine = options.socketPath
       ? `set SURF_SOCKET_PATH=${options.socketPath}\r\n`
       : "";
-    const content = `@echo off\r\n${envLine}"${nodePath}" "${hostPath}"\r\n`;
+    const goBlock = options.goHostPath
+      ? `set SURF_HOST_PROFILE=%SURF_HOST_PROFILE%\r\nif "%SURF_HOST_PROFILE%"=="" set SURF_HOST_PROFILE=node-full\r\nif "%SURF_HOST_PROFILE%"=="core-go" if exist "${options.goHostPath}" (\r\n  "${options.goHostPath}"\r\n  exit /b %errorlevel%\r\n)\r\n`
+      : "";
+    const content = `@echo off\r\n${envLine}${goBlock}"${nodePath}" "${hostPath}"\r\n`;
     fs.writeFileSync(batPath, content);
     return batPath;
   }
@@ -185,8 +252,11 @@ function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
   const envLine = options.socketPath
     ? `export SURF_SOCKET_PATH=\"${options.socketPath}\"\n`
     : "";
+  const goBlock = options.goHostPath
+    ? `profile=\"\${SURF_HOST_PROFILE:-node-full}\"\nif [ \"$profile\" = \"core-go\" ] && [ -x \"${options.goHostPath}\" ]; then\n  exec \"${options.goHostPath}\"\nfi\n`
+    : "";
   const content = `#!/bin/bash
-${envLine}cd "${hostDir}"
+${envLine}${goBlock}cd "${hostDir}"
 exec "${nodePath}" "${hostPath}"
 `;
   fs.writeFileSync(shPath, content);
@@ -246,27 +316,55 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
     return { installed: [], skipped: [BROWSERS[browser]?.name || browser], hints: [] };
   }
 
+  const hints = [];
+  const packageRoot = detectHostPackageRoot(hostPath);
+  if (!packageRoot) {
+    hints.push(
+      "Could not detect package root for Go host build; node-full profile will be used."
+    );
+  }
+
   if (platform === "win32") {
-    const wrapperPath = createWrapper(getWrapperDir(), nodePath, hostPath);
+    const wrapperDir = getWrapperDir();
+    const goBuild = packageRoot
+      ? buildGoHostBinary(wrapperDir, packageRoot)
+      : { path: null, hint: null };
+    if (goBuild.hint) hints.push(goBuild.hint);
+    const wrapperPath = createWrapper(wrapperDir, nodePath, hostPath, {
+      goHostPath: goBuild.path || undefined,
+    });
     const manifestPath = installWindowsRegistry(browser, extensionId, wrapperPath);
-    if (!manifestPath) return { installed: [], skipped: [browserConfig.name], hints: [] };
+    if (!manifestPath) return { installed: [], skipped: [browserConfig.name], hints };
+    if (goBuild.path) {
+      hints.push(`core-go profile available. Set SURF_HOST_PROFILE=core-go to use ${goBuild.path}`);
+    }
     return {
       installed: [{ browser: browserConfig.name, path: manifestPath }],
       skipped: [],
-      hints: [],
+      hints,
     };
   }
 
   const installed = [];
   const skipped = [];
-  const hints = [];
 
   const standardWrapperDir = getWrapperDir();
   const standardManifestDir = path.join(os.homedir(), browserConfig[platform]);
+  const standardGoBuild = packageRoot
+    ? buildGoHostBinary(standardWrapperDir, packageRoot)
+    : { path: null, hint: null };
+  if (standardGoBuild.hint) hints.push(standardGoBuild.hint);
+  if (standardGoBuild.path) {
+    hints.push(
+      `core-go profile available. Set SURF_HOST_PROFILE=core-go to use ${standardGoBuild.path}`
+    );
+  }
 
   if (browser === "chromium" && platform === "linux") {
     try {
-      const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath);
+      const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath, {
+        goHostPath: standardGoBuild.path || undefined,
+      });
       const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
       installed.push({ browser: browserConfig.name, path: manifestPath });
     } catch (e) {
@@ -280,11 +378,18 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
       const snapManifestDir = path.join(snapRoot, "chromium", "NativeMessagingHosts");
       try {
         const snapRuntime = prepareSnapRuntime(snapWrapperDir, nodePath, hostPath);
+        const snapGoBuild = buildGoHostBinary(snapWrapperDir, snapRuntime.packageRoot);
+        if (snapGoBuild.hint) hints.push(`Snap target: ${snapGoBuild.hint}`);
+        if (snapGoBuild.path) {
+          hints.push(
+            `Snap core-go profile available. Set SURF_HOST_PROFILE=core-go to use ${snapGoBuild.path}`
+          );
+        }
         const snapWrapperPath = createWrapper(
           snapWrapperDir,
           snapRuntime.nodePath,
           snapRuntime.hostPath,
-          { socketPath: snapRuntime.socketPath }
+          { socketPath: snapRuntime.socketPath, goHostPath: snapGoBuild.path || undefined }
         );
         const snapManifestPath = writeManifest(snapManifestDir, extensionId, snapWrapperPath);
         installed.push({ browser: `${browserConfig.name} (snap)`, path: snapManifestPath });
@@ -301,7 +406,9 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
   }
 
   try {
-    const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath);
+    const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath, {
+      goHostPath: standardGoBuild.path || undefined,
+    });
     const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
     installed.push({ browser: browserConfig.name, path: manifestPath });
   } catch (e) {
@@ -354,6 +461,10 @@ Examples:
   node install-native-host.cjs abcdefghijklmnopabcdefghijklmnop
   node install-native-host.cjs abcdefghijklmnop --browser brave
   node install-native-host.cjs abcdefghijklmnop --browser all
+
+Runtime profile:
+  SURF_HOST_PROFILE=node-full   # default Node host runtime
+  SURF_HOST_PROFILE=core-go     # prefer Go host runtime if surf-host-go is installed
 `);
 }
 

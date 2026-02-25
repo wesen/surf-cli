@@ -85,9 +85,16 @@ If surf is installed via a package manager that stores binaries in non-standard 
 ```bash
 export SURF_NODE_PATH=/path/to/node
 export SURF_HOST_PATH=/path/to/native/host.cjs
+export SURF_GO_PATH=/path/to/go
 export SURF_EXTENSION_PATH=/path/to/extension/dist
 ```
 See [Environment Variables](#environment-variables) for details.
+
+To use the Go host runtime when available, set:
+```bash
+export SURF_HOST_PROFILE=core-go
+```
+Default is `node-full`.
 
 ### Uninstall
 
@@ -540,12 +547,16 @@ surf workflow.validate ./my-workflow.json
 SURF_NETWORK_PATH         # Path for network capture logs (default: /tmp/surf)
 SURF_SOCKET_PATH          # Override Unix socket / named pipe path (default: /tmp/surf.sock on Linux/macOS)
 SURF_NODE_PATH            # Path to node binary (for native host wrapper)
+SURF_GO_PATH              # Path to go binary (used to build surf-host-go during install)
 SURF_HOST_PATH            # Path to native/host.cjs (for native host wrapper)
+SURF_HOST_PROFILE         # Host runtime profile: node-full (default) or core-go
 SURF_EXTENSION_PATH       # Path to extension dist/ directory
 ```
 
 **Use cases:**
 - `SURF_NODE_PATH` / `SURF_HOST_PATH`: Package manager installs (e.g., Nix) that store binaries in non-standard locations
+- `SURF_GO_PATH`: Use a specific Go binary when building the optional `surf-host-go` runtime during `surf install`
+- `SURF_HOST_PROFILE`: Runtime selection (`node-full` fallback or `core-go` when Go host binary is present)
 - `SURF_EXTENSION_PATH`: Package managers that create stable symlinks instead of changing paths on reinstall
 - `SURF_SOCKET_PATH`: Use a shared socket path when browser/runtime isolation changes `/tmp` behavior (for example, Snap Chromium)
 
@@ -553,6 +564,7 @@ SURF_EXTENSION_PATH       # Path to extension dist/ directory
 ```bash
 export SURF_NODE_PATH=~/.local/share/surf-cli/node
 export SURF_HOST_PATH=~/.local/share/surf-cli/native/host.cjs
+export SURF_HOST_PROFILE=core-go
 export SURF_EXTENSION_PATH=~/.local/share/surf-cli/extension
 ```
 
@@ -664,6 +676,9 @@ surf install <extension-id> --browser chromium
 
 # If using Snap Chromium, point CLI to the snap host socket:
 export SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock
+
+# Optional: use Go host runtime when installer built surf-host-go
+export SURF_HOST_PROFILE=core-go
 ```
 
 **Notes:**
@@ -671,6 +686,7 @@ export SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock
 - Screenshot resize uses ImageMagick instead of macOS `sips`
 - Headless servers need Xvfb + VNC for initial login setup
 - Snap Chromium installs a second native-host target under `~/snap/chromium/common/...`
+- Native wrapper supports runtime profile switching via `SURF_HOST_PROFILE=node-full|core-go`
 
 ## AI Agent Integration
 
@@ -691,6 +707,7 @@ See [`skills/README.md`](skills/README.md) for details.
 ```bash
 npm run dev       # Watch mode
 npm run build     # Production build
+npm run build:go-host   # Build surf-host-go binaries for linux/darwin/windows (current GOARCH)
 ```
 
 After changes:
