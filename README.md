@@ -547,6 +547,7 @@ SURF_EXTENSION_PATH       # Path to extension dist/ directory
 **Use cases:**
 - `SURF_NODE_PATH` / `SURF_HOST_PATH`: Package manager installs (e.g., Nix) that store binaries in non-standard locations
 - `SURF_EXTENSION_PATH`: Package managers that create stable symlinks instead of changing paths on reinstall
+- `SURF_SOCKET_PATH`: Use a shared socket path when browser/runtime isolation changes `/tmp` behavior (for example, Snap Chromium)
 
 **Example (Nix):**
 ```bash
@@ -660,12 +661,16 @@ sudo apt install xvfb tigervnc-standalone-server
 # Install Surf and native host
 npm install -g surf-cli
 surf install <extension-id> --browser chromium
+
+# If using Snap Chromium, point CLI to the snap host socket:
+export SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock
 ```
 
 **Notes:**
 - Use Chromium (no official Chrome for Linux ARM64)
 - Screenshot resize uses ImageMagick instead of macOS `sips`
 - Headless servers need Xvfb + VNC for initial login setup
+- Snap Chromium installs a second native-host target under `~/snap/chromium/common/...`
 
 ## AI Agent Integration
 

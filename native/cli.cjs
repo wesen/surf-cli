@@ -17,6 +17,24 @@ const SURF_TMP = IS_WIN ? path.join(os.tmpdir(), "surf") : "/tmp";
 const SOCKET_PATH = getSocketPath();
 if (IS_WIN) { try { fs.mkdirSync(SURF_TMP, { recursive: true }); } catch {} }
 
+function getSnapSocketHint() {
+  if (process.platform !== "linux") return null;
+
+  const snapManifestPath = path.join(
+    os.homedir(),
+    "snap/chromium/common/chromium/NativeMessagingHosts/surf.browser.host.json"
+  );
+  const snapSocketPath = path.join(
+    os.homedir(),
+    "snap/chromium/common/surf-cli/surf.sock"
+  );
+
+  if (!fs.existsSync(snapManifestPath)) return null;
+  if (SOCKET_PATH === snapSocketPath) return null;
+
+  return `Snap Chromium detected. Try: export SURF_SOCKET_PATH=${snapSocketPath}`;
+}
+
 // ============================================================================
 // Workflow Resolution and Management
 // ============================================================================
@@ -2939,6 +2957,11 @@ socket.on("error", (err) => {
     console.error("Error: Connection refused. Native host not running.");
   } else {
     console.error("Error:", err.message);
+  }
+  console.error(`Socket path: ${SOCKET_PATH}`);
+  const snapHint = getSnapSocketHint();
+  if (snapHint) {
+    console.error(`Hint: ${snapHint}`);
   }
   process.exit(1);
 });
