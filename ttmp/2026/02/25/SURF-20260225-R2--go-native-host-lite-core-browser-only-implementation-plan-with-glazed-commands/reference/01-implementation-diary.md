@@ -477,3 +477,46 @@ cd go && go run ./cmd/surf-go --help
 3. Verified CLI wiring by running `surf-go --help` and ensuring commands are visible.
 4. `go test ./...` passed.
 5. `tasks.md` updated to mark `T4.1` through `T4.16` complete.
+
+## Phase 13 - Implemented remaining core command groups + stream commands (T4.17-T4.34)
+
+### Commands run
+
+```bash
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+cd go && go run ./cmd/surf-go --help
+cd go && go run ./cmd/surf-go network stream --help
+```
+
+### Outputs created
+
+1. `go/internal/cli/commands/stream_simple.go`
+
+### Files modified
+
+1. `go/internal/cli/transport/client.go`
+2. `go/internal/cli/transport/client_test.go`
+3. `go/cmd/surf-go/main.go`
+
+### Results
+
+1. Extended transport with stream support (`Client.Stream`) including:
+   - `stream_request` send,
+   - `stream_started` handshake handling,
+   - event loop callback,
+   - `stream_stop` send on context cancellation/timeout.
+2. Added reusable Glazed stream command wrapper (`StreamCommand`) with duration/options settings.
+3. Wired remaining command groups in `surf-go`:
+   - `tab` (`list/new/switch/close/name/named`)
+   - `window` (`list/new/focus/close/resize`)
+   - `frame` (`list/switch/main/eval`)
+   - `dialog` (`accept/dismiss/info`)
+   - `network` (`list/get/body/origins/stats/clear/export/stream`)
+   - `console` (`read/stream`)
+   - `cookie` (`list/get/set/clear`)
+   - `emulate` (`network/cpu/geo/device/viewport/touch`)
+4. Added transport stream unit test.
+5. Verified command surfacing via help output.
+6. `go test ./...` passed.
+7. `tasks.md` updated to mark `T4.17` through `T4.34` complete.

@@ -121,3 +121,14 @@ Implemented a reusable simple Glazed command wrapper for tool dispatch and wired
 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_simple.go — Reusable simple tool wrapper command
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Registration of page/wait/input commands
+
+## 2026-02-25 - Added remaining core command groups + stream wrappers (T4.17-T4.34)
+
+Completed surf-go command coverage for tabs/windows/frames/dialog plus network/console/cookie/emulation groups, and added reusable stream command support for `network stream` and `console stream`.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/stream_simple.go — Reusable stream command implementation
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client.go — Stream transport support (`stream_request`/`stream_stop` lifecycle)
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client_test.go — Stream transport test coverage
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Registration of remaining core command groups

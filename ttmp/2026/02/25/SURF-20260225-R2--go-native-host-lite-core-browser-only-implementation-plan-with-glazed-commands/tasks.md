@@ -83,27 +83,27 @@
 
 ### Tabs / Windows / Frames / Dialog
 
-- [ ] T4.17: Implement `tab list` command.
-- [ ] T4.18: Implement `tab new` command.
-- [ ] T4.19: Implement `tab switch` command.
-- [ ] T4.20: Implement `tab close` command.
-- [ ] T4.21: Implement `tab name` command.
-- [ ] T4.22: Implement `tab named` command.
-- [ ] T4.23: Implement `window list/new/focus/close/resize` commands.
-- [ ] T4.24: Implement `frame list/switch/main/eval` commands.
-- [ ] T4.25: Implement `dialog accept/dismiss/info` commands.
+- [x] T4.17: Implement `tab list` command.
+- [x] T4.18: Implement `tab new` command.
+- [x] T4.19: Implement `tab switch` command.
+- [x] T4.20: Implement `tab close` command.
+- [x] T4.21: Implement `tab name` command.
+- [x] T4.22: Implement `tab named` command.
+- [x] T4.23: Implement `window list/new/focus/close/resize` commands.
+- [x] T4.24: Implement `frame list/switch/main/eval` commands.
+- [x] T4.25: Implement `dialog accept/dismiss/info` commands.
 
 ### Network / Console / Cookies / Emulation
 
-- [ ] T4.26: Implement `network list` command.
-- [ ] T4.27: Implement `network get` command.
-- [ ] T4.28: Implement `network body` command.
-- [ ] T4.29: Implement `network origins/stats/clear/export` commands.
-- [ ] T4.30: Implement `network stream` command.
-- [ ] T4.31: Implement `console read` command.
-- [ ] T4.32: Implement `console stream` command.
-- [ ] T4.33: Implement `cookie list/get/set/clear` commands.
-- [ ] T4.34: Implement `emulate network/cpu/geo/device/viewport/touch` commands.
+- [x] T4.26: Implement `network list` command.
+- [x] T4.27: Implement `network get` command.
+- [x] T4.28: Implement `network body` command.
+- [x] T4.29: Implement `network origins/stats/clear/export` commands.
+- [x] T4.30: Implement `network stream` command.
+- [x] T4.31: Implement `console read` command.
+- [x] T4.32: Implement `console stream` command.
+- [x] T4.33: Implement `cookie list/get/set/clear` commands.
+- [x] T4.34: Implement `emulate network/cpu/geo/device/viewport/touch` commands.
 
 ## Phase 5 - Compatibility, Packaging, and Installer
 
