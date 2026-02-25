@@ -35,9 +35,9 @@
 
 ## Phase 2 - Core Router and Host Runtime Behavior
 
-- [ ] T2.1: Parse and validate incoming socket `tool_request` payloads.
-- [ ] T2.2: Parse and validate incoming socket `stream_request` payloads.
-- [ ] T2.3: Parse and validate incoming socket `stream_stop` payloads.
+- [x] T2.1: Parse and validate incoming socket `tool_request` payloads.
+- [x] T2.2: Parse and validate incoming socket `stream_request` payloads.
+- [x] T2.3: Parse and validate incoming socket `stream_stop` payloads.
 - [ ] T2.4: Implement host-side routing for core-v1 tools.
 - [ ] T2.5: Forward extension-bound messages preserving IDs.
 - [ ] T2.6: Correlate extension responses to pending socket clients.

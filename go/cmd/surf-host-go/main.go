@@ -178,7 +178,22 @@ func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []by
 	}
 
 	msgType := asString(msg["type"])
-	if msgType == "stream_stop" {
+	switch msgType {
+	case "tool_request":
+		if _, err := router.ParseToolRequest(msg); err != nil {
+			h.writeClientError(session, err.Error())
+			return
+		}
+	case "stream_request":
+		if _, err := router.ParseStreamRequest(msg); err != nil {
+			h.writeClientError(session, err.Error())
+			return
+		}
+	case "stream_stop":
+		if err := router.ParseStreamStop(msg); err != nil {
+			h.writeClientError(session, err.Error())
+			return
+		}
 		h.stopStreamsForSession(session)
 		return
 	}

@@ -76,3 +76,13 @@ Added the socket listener abstraction, client session management, pending/stream
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/socketbridge/listener_unix_test.go — Unix listener test
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/pending/store_test.go — Pending store tests
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/stream_registry_test.go — Stream registry tests
+
+## 2026-02-25 - Implemented socket ingress validation (T2.1-T2.3)
+
+Added strict parser/validator logic for `tool_request`, `stream_request`, and `stream_stop` socket messages, and integrated validation into runtime before forwarding requests to the extension channel.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress.go — Message-shape validation for socket ingress types
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/ingress_test.go — Validation tests for accepted/rejected payload shapes
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Runtime integration of ingress validation and CLI error response path

@@ -333,3 +333,32 @@ cd go && go test ./...
    - handle SIGINT/SIGTERM with listener shutdown and unix socket cleanup.
 6. `go test ./...` passed after formatting.
 7. `tasks.md` was updated to mark `T1.6` through `T1.12` complete.
+
+## Phase 9 - Implemented strict socket ingress validation (T2.1-T2.3)
+
+### Commands run
+
+```bash
+# wrote router ingress validation parser + tests and wired it into host runtime
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+```
+
+### Outputs created
+
+1. `go/internal/host/router/ingress.go`
+2. `go/internal/host/router/ingress_test.go`
+
+### Files modified
+
+1. `go/cmd/surf-host-go/main.go`
+
+### Results
+
+1. Added explicit request parsing and validation for socket ingress message types:
+   - `tool_request` requires `method=execute_tool` and `params.tool`.
+   - `stream_request` requires `streamType` in `{STREAM_CONSOLE, STREAM_NETWORK}`.
+   - `stream_stop` requires `type=stream_stop`.
+2. Wired validation into host runtime before request forwarding, returning structured CLI error lines on malformed requests.
+3. `go test ./...` passed.
+4. `tasks.md` updated to mark `T2.1`, `T2.2`, and `T2.3` complete.
