@@ -103,5 +103,5 @@ func (c *SimpleToolCommand) RunIntoGlazeProcessor(
 		return err
 	}
 
-	return gp.AddRow(ctx, ToolResponseToRow(resp))
+	return gp.AddRow(ctx, ToolResponseToRow(c.tool, resp))
 }

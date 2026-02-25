@@ -88,7 +88,12 @@ func (c *StreamCommand) RunIntoGlazeProcessor(
 	}
 
 	return client.Stream(streamCtx, c.streamType, options, tabID, func(msg map[string]any) error {
-		row := types.NewRow(types.MRP("event", msg))
+		eventType, _ := msg["type"].(string)
+		row := types.NewRow(
+			types.MRP("stream_type", c.streamType),
+			types.MRP("event_type", eventType),
+			types.MRP("event", msg),
+		)
 		return gp.AddRow(streamCtx, row)
 	})
 }

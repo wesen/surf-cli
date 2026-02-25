@@ -84,5 +84,5 @@ func (c *NavigateCommand) RunIntoGlazeProcessor(
 	if err != nil {
 		return err
 	}
-	return gp.AddRow(ctx, ToolResponseToRow(resp))
+	return gp.AddRow(ctx, ToolResponseToRow("navigate", resp))
 }
