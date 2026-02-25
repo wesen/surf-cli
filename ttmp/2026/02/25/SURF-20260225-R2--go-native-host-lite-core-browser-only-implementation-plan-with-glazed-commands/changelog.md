@@ -112,3 +112,12 @@ Implemented the initial `surf-go` Cobra+Glazed skeleton, including root help/log
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format.go — Shared response-to-row formatter
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/go.mod — Added Glazed/Cobra dependencies
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/go.sum — Dependency lock entries
+
+## 2026-02-25 - Added Page/Input command wrappers in `surf-go` (T4.1-T4.16)
+
+Implemented a reusable simple Glazed command wrapper for tool dispatch and wired the initial command groups and interaction commands for core browsing workflows.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_simple.go — Reusable simple tool wrapper command
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Registration of page/wait/input commands

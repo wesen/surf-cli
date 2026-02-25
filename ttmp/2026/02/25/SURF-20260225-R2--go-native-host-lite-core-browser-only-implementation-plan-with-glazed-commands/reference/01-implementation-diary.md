@@ -444,3 +444,36 @@ cd go && go run ./cmd/surf-go --help
 6. Added unit tests for base envelope builder, formatter extraction, and transport roundtrip.
 7. Full package tests pass and `surf-go --help` renders correctly.
 8. `tasks.md` updated to mark `T3.1` through `T3.8` complete.
+
+## Phase 12 - Implemented Page + Input command wrappers (T4.1-T4.16)
+
+### Commands run
+
+```bash
+cd go && gofmt -w ./cmd ./internal
+cd go && go test ./...
+cd go && go run ./cmd/surf-go --help
+```
+
+### Outputs created
+
+1. `go/internal/cli/commands/tool_simple.go`
+
+### Files modified
+
+1. `go/cmd/surf-go/main.go`
+
+### Results
+
+1. Added reusable `SimpleToolCommand` Glazed wrapper that:
+   - decodes common transport flags,
+   - accepts command-specific args through `--args-json`,
+   - merges command defaults,
+   - sends `tool_request` via shared transport and emits normalized rows.
+2. Registered first Phase 4 command surfaces in `surf-go`:
+   - `page read|text|state|search`
+   - `wait element|url|network|dom`
+   - `click`, `type`, `key`, `scroll`, `hover`, `drag`, `select`, `screenshot`
+3. Verified CLI wiring by running `surf-go --help` and ensuring commands are visible.
+4. `go test ./...` passed.
+5. `tasks.md` updated to mark `T4.1` through `T4.16` complete.

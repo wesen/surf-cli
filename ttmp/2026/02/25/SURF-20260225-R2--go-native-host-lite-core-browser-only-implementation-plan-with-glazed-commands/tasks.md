@@ -61,25 +61,25 @@
 
 ### Page
 
-- [ ] T4.1: Implement `page read` command.
-- [ ] T4.2: Implement `page text` command.
-- [ ] T4.3: Implement `page state` command.
-- [ ] T4.4: Implement `page search` command.
-- [ ] T4.5: Implement `wait element` command.
-- [ ] T4.6: Implement `wait url` command.
-- [ ] T4.7: Implement `wait network` command.
-- [ ] T4.8: Implement `wait dom` command.
+- [x] T4.1: Implement `page read` command.
+- [x] T4.2: Implement `page text` command.
+- [x] T4.3: Implement `page state` command.
+- [x] T4.4: Implement `page search` command.
+- [x] T4.5: Implement `wait element` command.
+- [x] T4.6: Implement `wait url` command.
+- [x] T4.7: Implement `wait network` command.
+- [x] T4.8: Implement `wait dom` command.
 
 ### Input / Interaction
 
-- [ ] T4.9: Implement `click` command.
-- [ ] T4.10: Implement `type` command.
-- [ ] T4.11: Implement `key` command.
-- [ ] T4.12: Implement `scroll` command.
-- [ ] T4.13: Implement `hover` command.
-- [ ] T4.14: Implement `drag` command.
-- [ ] T4.15: Implement `select` command.
-- [ ] T4.16: Implement `screenshot` command.
+- [x] T4.9: Implement `click` command.
+- [x] T4.10: Implement `type` command.
+- [x] T4.11: Implement `key` command.
+- [x] T4.12: Implement `scroll` command.
+- [x] T4.13: Implement `hover` command.
+- [x] T4.14: Implement `drag` command.
+- [x] T4.15: Implement `select` command.
+- [x] T4.16: Implement `screenshot` command.
 
 ### Tabs / Windows / Frames / Dialog
 
