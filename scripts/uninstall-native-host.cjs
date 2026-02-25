@@ -60,36 +60,43 @@ function getWrapperDir() {
   }
 }
 
-function removeManifest(browser) {
+function getChromiumSnapRoot() {
+  if (process.platform !== "linux") return null;
+  const root = path.join(os.homedir(), "snap/chromium/common");
+  return fs.existsSync(root) ? root : null;
+}
+
+function getManifestPaths(browser) {
   const platform = process.platform;
   const browserConfig = BROWSERS[browser];
 
   if (!browserConfig || !browserConfig[platform]) {
-    return null;
+    return [];
   }
 
   if (platform === "win32") {
-    return removeWindowsRegistry(browser);
+    return [
+      `HKCU\\Software\\${browserConfig.win32}\\NativeMessagingHosts\\${HOST_NAME}`,
+    ];
   }
 
-  const manifestPath = path.join(
-    os.homedir(),
-    browserConfig[platform],
-    `${HOST_NAME}.json`
-  );
+  const manifestPaths = [
+    path.join(os.homedir(), browserConfig[platform], `${HOST_NAME}.json`),
+  ];
 
-  try {
-    fs.unlinkSync(manifestPath);
-    return manifestPath;
-  } catch {
-    return null;
+  if (platform === "linux" && browser === "chromium") {
+    const snapRoot = getChromiumSnapRoot();
+    if (snapRoot) {
+      manifestPaths.push(
+        path.join(snapRoot, "chromium", "NativeMessagingHosts", `${HOST_NAME}.json`)
+      );
+    }
   }
+
+  return manifestPaths;
 }
 
-function removeWindowsRegistry(browser) {
-  const browserConfig = BROWSERS[browser];
-  const regPath = `HKCU\\Software\\${browserConfig.win32}\\NativeMessagingHosts\\${HOST_NAME}`;
-
+function removeWindowsRegistry(regPath) {
   try {
     execSync(`reg delete "${regPath}" /f`, { stdio: "pipe" });
     return regPath;
@@ -98,16 +105,50 @@ function removeWindowsRegistry(browser) {
   }
 }
 
-function removeWrapperDir() {
-  const wrapperDir = getWrapperDir();
-  if (!wrapperDir) return null;
+function removeManifest(browser) {
+  const platform = process.platform;
+  const manifestPaths = getManifestPaths(browser);
+  const removed = [];
 
-  try {
-    fs.rmSync(wrapperDir, { recursive: true, force: true });
-    return wrapperDir;
-  } catch {
-    return null;
+  for (const manifestPath of manifestPaths) {
+    if (platform === "win32") {
+      const result = removeWindowsRegistry(manifestPath);
+      if (result) removed.push(result);
+      continue;
+    }
+
+    try {
+      fs.unlinkSync(manifestPath);
+      removed.push(manifestPath);
+    } catch {}
   }
+
+  return removed;
+}
+
+function removeWrapperDirs(allBrowsers) {
+  const removed = [];
+  const defaultWrapperDir = getWrapperDir();
+
+  if (defaultWrapperDir) {
+    try {
+      fs.rmSync(defaultWrapperDir, { recursive: true, force: true });
+      removed.push(defaultWrapperDir);
+    } catch {}
+  }
+
+  if (process.platform === "linux" && allBrowsers.includes("chromium")) {
+    const snapRoot = getChromiumSnapRoot();
+    if (snapRoot) {
+      const snapWrapperDir = path.join(snapRoot, "surf-cli");
+      try {
+        fs.rmSync(snapWrapperDir, { recursive: true, force: true });
+        removed.push(snapWrapperDir);
+      } catch {}
+    }
+  }
+
+  return removed;
 }
 
 function parseArgs() {
@@ -168,9 +209,11 @@ function main() {
       continue;
     }
 
-    const result = removeManifest(browser);
-    if (result) {
-      removed.push({ browser: BROWSERS[browser].name, path: result });
+    const removedPaths = removeManifest(browser);
+    if (removedPaths.length > 0) {
+      for (const p of removedPaths) {
+        removed.push({ browser: BROWSERS[browser].name, path: p });
+      }
     } else {
       notFound.push(BROWSERS[browser].name);
     }
@@ -188,9 +231,12 @@ function main() {
   }
 
   if (all) {
-    const wrapperDir = removeWrapperDir();
-    if (wrapperDir) {
-      console.log(`\nRemoved wrapper directory: ${wrapperDir}`);
+    const removedWrapperDirs = removeWrapperDirs(browsers);
+    if (removedWrapperDirs.length > 0) {
+      console.log("\nRemoved wrapper directories:");
+      for (const dir of removedWrapperDirs) {
+        console.log(`  ${dir}`);
+      }
     }
   }
 
