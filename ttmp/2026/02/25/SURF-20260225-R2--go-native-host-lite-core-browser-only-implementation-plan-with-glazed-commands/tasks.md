@@ -128,7 +128,7 @@
 
 ## Phase 7 - Rollout
 
-- [ ] T7.1: Enable Go host as opt-in beta profile.
+- [x] T7.1: Enable Go host as opt-in beta profile.
 - [ ] T7.2: Collect regression reports and fix parity gaps.
 - [ ] T7.3: Promote Go host to default for core commands.
 - [ ] T7.4: Keep provider commands routed to Node profile until separate plan lands.

@@ -603,3 +603,11 @@ node scripts/tests/native-host-installer-smoke.cjs
 4. Added installer smoke test covering Linux standard + Snap targets and uninstall cleanup (`T6.7`).
 5. Added a dedicated manual real-browser checklist doc for `T6.8` execution.
 6. `tasks.md` updated: `T6.1`-`T6.7` complete, `T6.8` pending user-run browser validation.
+
+## Phase 16 - Marked rollout opt-in milestone complete (T7.1)
+
+### Result
+
+1. `SURF_HOST_PROFILE=core-go|node-full` runtime switch is implemented and documented.
+2. Go host is now available as opt-in beta profile (`T7.1` complete).
+3. Remaining rollout tasks (`T7.2`-`T7.4`) depend on real-browser regression feedback and rollout decisions.

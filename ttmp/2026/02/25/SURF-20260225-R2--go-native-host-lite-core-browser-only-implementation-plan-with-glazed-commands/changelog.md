@@ -155,3 +155,12 @@ Expanded verification with mapping contract tests, CLI integration tests, and in
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/integration_test.go — Representative CLI integration tests against mock socket host
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/tests/native-host-installer-smoke.cjs — Installer smoke test for standard + snap Linux targets
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/ttmp/2026/02/25/SURF-20260225-R2--go-native-host-lite-core-browser-only-implementation-plan-with-glazed-commands/reference/03-manual-browser-validation-checklist.md — T6.8 manual execution checklist
+
+## 2026-02-25 - Enabled Go host rollout as opt-in profile (T7.1)
+
+Confirmed rollout milestone T7.1 is complete via installer/runtime profile support (`SURF_HOST_PROFILE=core-go|node-full`) while keeping node-full as default.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Profile-aware wrapper logic
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/README.md — Profile usage docs for opt-in go-core mode
