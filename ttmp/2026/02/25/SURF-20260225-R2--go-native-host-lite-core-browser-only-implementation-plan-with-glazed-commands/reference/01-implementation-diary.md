@@ -16,11 +16,21 @@ RelatedFiles:
     - Path: go/cmd/surf-go/integration_test.go
       Note: Step 19 default-output assertion
     - Path: go/internal/cli/commands/format.go
-      Note: Structured formatter update captured in Step 18
+      Note: |-
+        Structured formatter update captured in Step 18
+        Step 20 direct-row formatter
     - Path: go/internal/cli/commands/format_test.go
-      Note: Formatter parsing tests captured in Step 18
+      Note: |-
+        Formatter parsing tests captured in Step 18
+        Step 20 formatter tests
     - Path: go/internal/cli/commands/glazed_defaults.go
       Note: Step 19 YAML default wiring
+    - Path: go/internal/cli/commands/navigate.go
+      Note: Step 20 multi-row emit
+    - Path: go/internal/cli/commands/tool_raw.go
+      Note: Step 20 multi-row emit
+    - Path: go/internal/cli/commands/tool_simple.go
+      Note: Step 20 multi-row emit
     - Path: native/host-helpers.cjs
       Note: Command/tool mapping inventory baseline
     - Path: native/host.cjs
@@ -41,6 +51,7 @@ LastUpdated: 2026-02-25T17:39:00-05:00
 WhatFor: Preserve exact planning context, evidence, and command trace for continuation
 WhenToUse: Use when continuing implementation from this planning ticket
 ---
+
 
 
 
@@ -836,3 +847,85 @@ In parallel, I changed the Glazed output default to `yaml` at the schema default
 ```
 
 - Example current default (no `--output`): YAML document with top-level `data` key.
+
+## Step 20: Remove `data` wrapper and emit parsed content directly as rows
+
+This step removed the `data` wrapper key entirely from tool command output rows. Instead of producing one wrapper row (`{"data": ...}`), the formatter now turns parsed result content into actual row objects so output is materially closer to Node CLI JSON shape.
+
+For object payloads, one object row is emitted directly. For array payloads, one row per item is emitted (objects stay object rows). For text/non-JSON payloads, a fallback row uses `content` so there is still a consistent row field.
+
+### Prompt Context
+
+**User prompt (verbatim):** "can we remove the data key, and just use the content for rows?"
+
+**Assistant interpretation:** Remove the `data` wrapper field from row output and map parsed response content directly into row payloads.
+
+**Inferred user intent:** Move Go output shape closer to Node output and reduce wrapper noise for automation.
+
+**Commit (code):** 122390f — "feat(surf-go): emit parsed content as direct rows"
+
+### What I did
+
+- Replaced `ToolResponseToRow` with multi-row `ToolResponseToRows` in:
+  - `go/internal/cli/commands/format.go`
+- Updated command emitters to add all returned rows:
+  - `go/internal/cli/commands/tool_simple.go`
+  - `go/internal/cli/commands/tool_raw.go`
+  - `go/internal/cli/commands/navigate.go`
+- Expanded formatter tests for object/array/text row behavior:
+  - `go/internal/cli/commands/format_test.go`
+- Ran validation:
+  - `cd go && go test ./...`
+  - live CLI checks with Snap socket for `page state`, `tab list`, `navigate`.
+
+### Why
+
+- User explicitly asked to remove `data` wrapper.
+- Direct rows are easier to consume and align better with Node JSON outputs.
+
+### What worked
+
+- `page state --output json` now returns:
+  - `[ {"id":...,"title":..., ...} ]`
+- `tab list --output json` now returns:
+  - `[ {"id":...}, {"id":...}, ... ]`
+- `navigate --output json` now returns:
+  - `[ {"content":"OK"} ]`
+- All Go tests pass.
+
+### What didn't work
+
+- N/A.
+
+### What I learned
+
+- Emitting array items as separate rows is the cleanest way to eliminate wrapper keys while preserving Glazed row semantics.
+
+### What was tricky to build
+
+- The formatter had to preserve useful behavior for both structured JSON payloads and plain text payloads without reintroducing wrapper-only rows.
+- Final behavior: structured payload -> direct row(s), text payload -> `content` field row.
+
+### What warrants a second pair of eyes
+
+- Whether error responses should be `{"error":...}` rows or surfaced as command errors/non-zero exits.
+
+### What should be done in the future
+
+1. Decide final error-shape policy (row vs command failure).
+2. Optionally add exact Node top-level shape mode if needed for strict consumers.
+
+### Code review instructions
+
+- Review formatter behavior in `go/internal/cli/commands/format.go`.
+- Review row emission callsites in `tool_simple.go`, `tool_raw.go`, `navigate.go`.
+- Validate with:
+  - `cd go && go test ./...`
+  - `cd go && SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" go run ./cmd/surf-go tab list --output json`
+  - `cd go && SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" go run ./cmd/surf-go page state --output json`
+
+### Technical details
+
+- Object payloads: `map[string]any` -> one row from map keys/values.
+- Array payloads: `[]any` -> one row per item; object items become map rows.
+- Text payloads: fallback row with `content` key.

@@ -205,3 +205,15 @@ Updated surf-go output shaping so command rows emit only a `data` field (parsed 
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Switched to schema helper
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/stream_simple.go — Switched to schema helper
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/integration_test.go — Output-default assertion
+
+## 2026-02-25 - Removed `data` wrapper and switched to direct content rows
+
+Adjusted surf-go formatter to emit parsed payloads as direct rows rather than wrapping under `data`. Arrays now emit one row per item; object payloads emit direct object rows; text payloads use a `content` field row.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format.go — Direct row shaping from parsed content
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/format_test.go — New row-shape assertions for object/array/text
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_simple.go — Emit multiple rows
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_raw.go — Emit multiple rows
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Emit multiple rows

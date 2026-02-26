@@ -19,6 +19,7 @@ RelatedFiles:
       Note: |-
         New response parser and structured row shaping logic
         Structured response parsing and row schema
+        Direct content rows without data wrapper
     - Path: go/internal/cli/commands/format_test.go
       Note: |-
         Unit tests validating structured text parsing
@@ -41,6 +42,7 @@ RelatedFiles:
       Note: |-
         Passes tool name to shared formatter
         Formatter tool-name callsite update
+        Array payloads emitted as multiple rows
     - Path: scripts/compare-go-node-output.cjs
       Note: |-
         Live comparison harness for Node vs Go output shape and payloads
@@ -55,6 +57,7 @@ LastUpdated: 2026-02-25T18:56:00-05:00
 WhatFor: Track concrete output-parity progress and remaining schema gaps during Go CLI migration
 WhenToUse: Use when validating JSON output quality/parity or debugging formatter regressions
 ---
+
 
 
 
@@ -211,3 +214,41 @@ data:
 ```
 
 Remaining intentional difference from Node CLI: Go still emits row array wrappers (`[{"data": ...}]`) instead of raw top-level payloads.
+
+## Update - remove `data` wrapper; direct content rows (2026-02-25)
+
+Follow-up change applied after payload-only `data` phase:
+
+- Removed `data` wrapper key entirely from formatter rows.
+- Structured object payloads now emit as direct row objects.
+- Structured array payloads now emit one row per array item.
+- Text payloads emit `content` rows.
+
+Examples:
+
+- `tab list --output json` now:
+
+```json
+[
+  { "id": 441388236, "title": "Extensions - Surf", "url": "chrome://...", "active": false, "windowId": 441388235 },
+  { "id": 441388279, "title": "Example Domain", "url": "https://example.org/", "active": false, "windowId": 441388235 }
+]
+```
+
+- `page state --output json` now:
+
+```json
+[
+  { "id": 62, "title": "Example Domain", "url": "https://example.com/", "focusedElement": {"tag":"body","type":null}, "hasModal": false }
+]
+```
+
+- `navigate --output json` now:
+
+```json
+[
+  { "content": "OK" }
+]
+```
+
+This removes wrapper noise while keeping Glazed row semantics.
