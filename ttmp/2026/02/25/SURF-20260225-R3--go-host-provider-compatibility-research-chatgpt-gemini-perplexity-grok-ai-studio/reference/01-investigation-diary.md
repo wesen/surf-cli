@@ -339,3 +339,29 @@ Result:
 1. Targeted suites pass.
 2. Full Go module test suite passes.
 3. Tasks 2-6 marked complete.
+
+### Entry 5 - Task 7 validation attempt and environment handoff (2026-02-25 20:3x EST)
+
+Goal:
+1. Validate ChatGPT integration against a live browser-connected host socket.
+
+Commands run:
+
+```bash
+ls -l /tmp/surf.sock ~/snap/chromium/common/surf-cli/surf.sock
+go run ./cmd/surf-go tool-raw --tool chatgpt --args-json '{"query":"say ping"}' --socket-path /tmp/surf.sock
+go run ./cmd/surf-go tool-raw --tool chatgpt --args-json '{"query":"say ping"}' --socket-path /home/manuel/snap/chromium/common/surf-cli/surf.sock
+go run ./cmd/surf-go tool-raw --tool gemini --args-json '{"query":"say ping"}' --socket-path /home/manuel/snap/chromium/common/surf-cli/surf.sock
+```
+
+Results:
+1. `/tmp/surf.sock` refused connection (`connect: connection refused`).
+2. Snap socket responded to `chatgpt` with `ChatGPT login required`.
+3. Same snap socket successfully executed `gemini` end-to-end.
+
+Interpretation:
+1. Live socket currently appears to be served by Node runtime profile (or otherwise not strictly `core-go`-limited), because `gemini` succeeds.
+2. This environment cannot conclusively verify the new Go-only ChatGPT integration path without forcing browser host profile to `core-go` and reconnecting extension.
+
+Handoff requirement:
+1. Browser-side verification by user is required to confirm ChatGPT query flow in real extension-native-messaging runtime under `SURF_HOST_PROFILE=core-go`.
