@@ -96,6 +96,8 @@ export SURF_HOST_PROFILE=core-go
 ```
 Default is `node-full`.
 
+For full Go runtime install, verification, troubleshooting, and `surf-go` CLI details, see [`README.go.md`](README.go.md).
+
 ### Uninstall
 
 ```bash
