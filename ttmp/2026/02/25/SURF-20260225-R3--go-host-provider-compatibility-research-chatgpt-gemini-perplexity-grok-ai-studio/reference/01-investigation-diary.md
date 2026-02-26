@@ -365,3 +365,8 @@ Interpretation:
 
 Handoff requirement:
 1. Browser-side verification by user is required to confirm ChatGPT query flow in real extension-native-messaging runtime under `SURF_HOST_PROFILE=core-go`.
+
+### Entry 6 - Status checkpoint
+
+1. Tasks 1-6 and 8 are complete.
+2. Task 7 remains pending user-side browser validation under confirmed `core-go` runtime profile.

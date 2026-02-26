@@ -37,4 +37,4 @@
 - [x] Task 5: Add/adjust host and router tests so `chatgpt` is handled by provider path while other providers remain blocked.
 - [x] Task 6: Run `go test ./...` in `go/` and fix regressions.
 - [ ] Task 7: Validate local CLI behavior against running extension (if environment available), otherwise capture exact manual test handoff for browser-side verification.
-- [ ] Task 8: Update diary with detailed command log/results and commit each completed task incrementally.
+- [x] Task 8: Update diary with detailed command log/results and commit each completed task incrementally.
