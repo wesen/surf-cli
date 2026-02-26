@@ -1,6 +1,10 @@
 package commands
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-go-golems/glazed/pkg/types"
+)
 
 func TestExtractErrorText(t *testing.T) {
 	resp := map[string]any{
@@ -54,5 +58,43 @@ func TestParseStructuredTextArray(t *testing.T) {
 	a, ok := data.([]any)
 	if !ok || len(a) != 2 {
 		t.Fatalf("expected array data of len 2, got %#v", data)
+	}
+}
+
+func TestToolResponseToRowUsesParsedData(t *testing.T) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"result": map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": `[{"id":1},{"id":2}]`}},
+		},
+	}
+	row := ToolResponseToRow("tab.list", resp)
+	if got := types.GetFields(row); len(got) != 1 || got[0] != "data" {
+		t.Fatalf("unexpected row fields: %#v", got)
+	}
+	value, ok := row.Get("data")
+	if !ok {
+		t.Fatalf("expected data field in row")
+	}
+	a, ok := value.([]any)
+	if !ok || len(a) != 2 {
+		t.Fatalf("expected parsed array in data field, got %#v", value)
+	}
+}
+
+func TestToolResponseToRowFallsBackToText(t *testing.T) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"result": map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": "OK"}},
+		},
+	}
+	row := ToolResponseToRow("navigate", resp)
+	value, ok := row.Get("data")
+	if !ok {
+		t.Fatalf("expected data field in row")
+	}
+	if s, ok := value.(string); !ok || s != "OK" {
+		t.Fatalf("expected text fallback in data field, got %#v", value)
 	}
 }

@@ -115,3 +115,21 @@ func TestSurfGoNetworkStreamCommandStartStop(t *testing.T) {
 		t.Fatalf("mock stream host failed: %v", err)
 	}
 }
+
+func TestSurfGoDefaultOutputFormatIsYAML(t *testing.T) {
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	tabCmd, _, err := root.Find([]string{"tab", "list"})
+	if err != nil {
+		t.Fatalf("failed to find tab list command: %v", err)
+	}
+	flag := tabCmd.Flags().Lookup("output")
+	if flag == nil {
+		t.Fatalf("output flag not found on tab list command")
+	}
+	if flag.DefValue != "yaml" {
+		t.Fatalf("expected default output format yaml, got %q", flag.DefValue)
+	}
+}

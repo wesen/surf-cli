@@ -9,39 +9,19 @@ import (
 )
 
 func ToolResponseToRow(tool string, resp map[string]any) types.Row {
-	status := "ok"
-	errText := ""
-	text := ""
-	data := any(nil)
-	content := any(nil)
-	result := any(nil)
-	dataKind := "none"
-	dataCount := int64(0)
-
 	if e := extractErrorText(resp); e != "" {
-		status = "error"
-		errText = e
-	} else {
-		parsed := parseResult(resp)
-		text = parsed.Text
-		data = parsed.Data
-		content = parsed.Content
-		result = resp["result"]
-		dataKind, dataCount = classifyData(data)
+		return types.NewRow(types.MRP("data", map[string]any{
+			"tool":  tool,
+			"error": e,
+		}))
 	}
 
-	return types.NewRow(
-		types.MRP("tool", tool),
-		types.MRP("status", status),
-		types.MRP("id", resp["id"]),
-		types.MRP("error", errText),
-		types.MRP("text", text),
-		types.MRP("data_kind", dataKind),
-		types.MRP("data_count", dataCount),
-		types.MRP("data", data),
-		types.MRP("content", content),
-		types.MRP("result", result),
-	)
+	parsed := parseResult(resp)
+	data := parsed.Data
+	if data == nil {
+		data = parsed.Text
+	}
+	return types.NewRow(types.MRP("data", data))
 }
 
 type parsedResult struct {
@@ -93,17 +73,6 @@ func parseStructuredText(text string) any {
 		return v
 	default:
 		return nil
-	}
-}
-
-func classifyData(v any) (string, int64) {
-	switch d := v.(type) {
-	case map[string]any:
-		return "object", int64(len(d))
-	case []any:
-		return "array", int64(len(d))
-	default:
-		return "none", 0
 	}
 }
 

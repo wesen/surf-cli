@@ -12,7 +12,6 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/schema"
 	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
-	"github.com/go-go-golems/glazed/pkg/settings"
 	"github.com/nicobailon/surf-cli/gohost/internal/cli/transport"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/config"
 )
@@ -32,7 +31,7 @@ type SimpleToolSettings struct {
 }
 
 func NewSimpleToolCommand(name string, short string, tool string, defaultArgs map[string]any) (*SimpleToolCommand, error) {
-	glazedSection, err := settings.NewGlazedSchema()
+	glazedSection, err := NewGlazedSchemaWithYAMLDefault()
 	if err != nil {
 		return nil, err
 	}
