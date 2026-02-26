@@ -165,7 +165,9 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 	}
 
 	if req.File != "" {
-		return nil, fmt.Errorf("File upload not yet implemented")
+		if err := bridge.uploadFiles(ctx, req.File); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := bridge.typePrompt(ctx, fullPrompt); err != nil {
@@ -473,6 +475,110 @@ func (b *chatGPTBridge) clickSend(ctx context.Context) error {
 		"windowsVirtualKeyCode": 13,
 		"nativeVirtualKeyCode":  13,
 	}, extCallTimeout)
+}
+
+func (b *chatGPTBridge) waitForFileInputSelector(ctx context.Context, timeout time.Duration) (string, error) {
+	script := `(function() {
+	  function dispatchClickSequence(target){
+	    if(!target || !(target instanceof EventTarget)) return false;
+	    const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+	    for (const type of types) {
+	      const common = { bubbles: true, cancelable: true, view: window };
+	      let event;
+	      if (type.startsWith('pointer') && 'PointerEvent' in window) {
+	        event = new PointerEvent(type, { ...common, pointerId: 1, pointerType: 'mouse' });
+	      } else {
+	        event = new MouseEvent(type, common);
+	      }
+	      target.dispatchEvent(event);
+	    }
+	    return true;
+	  }
+	  const attr = 'data-surf-file-input-id';
+	  const pickInput = () => {
+	    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+	    return inputs.find((input) => !input.disabled) || inputs[0] || null;
+	  };
+	  let input = pickInput();
+	  if (!input) {
+	    const attachSelectors = [
+	      'button[data-testid*="composer-plus"]',
+	      'button[data-testid*="attach"]',
+	      'button[aria-label*="Attach"]',
+	      'button[aria-label*="attach"]',
+	      'button[aria-label*="Upload"]',
+	      'button[aria-label*="upload"]',
+	    ];
+	    for (const selector of attachSelectors) {
+	      const button = document.querySelector(selector);
+	      if (button) {
+	        dispatchClickSequence(button);
+	        break;
+	      }
+	    }
+	    input = pickInput();
+	  }
+	  if (!input) return null;
+	  let id = input.getAttribute(attr);
+	  if (!id) {
+	    id = 'surf-upload-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+	    input.setAttribute(attr, id);
+	  }
+	  return '[' + attr + '="' + id + '"]';
+	})()`
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		value, err := b.evaluate(ctx, script, extCallTimeout)
+		if err != nil {
+			return "", err
+		}
+		selector := strings.TrimSpace(asString(value))
+		if selector != "" {
+			return selector, nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return "", fmt.Errorf("ChatGPT file input not found")
+}
+
+func splitFileList(raw string) []string {
+	parts := strings.Split(raw, ",")
+	files := make([]string, 0, len(parts))
+	for _, part := range parts {
+		clean := strings.TrimSpace(part)
+		if clean != "" {
+			files = append(files, clean)
+		}
+	}
+	return files
+}
+
+func (b *chatGPTBridge) uploadFiles(ctx context.Context, rawFiles string) error {
+	files := splitFileList(rawFiles)
+	if len(files) == 0 {
+		return fmt.Errorf("Invalid file path")
+	}
+	selector, err := b.waitForFileInputSelector(ctx, 12*time.Second)
+	if err != nil {
+		return err
+	}
+	resp, err := b.caller.Request(ctx, map[string]any{
+		"type":     "UPLOAD_FILE",
+		"tabId":    b.tabID,
+		"selector": selector,
+		"files":    files,
+	}, 45*time.Second)
+	if err != nil {
+		return err
+	}
+	if e := responseError(resp); e != "" {
+		return errors.New(e)
+	}
+	if success, ok := resp["success"]; ok && !asBool(success) {
+		return fmt.Errorf("File upload failed")
+	}
+	return nil
 }
 
 func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Duration) (string, error) {

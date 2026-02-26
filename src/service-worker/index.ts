@@ -1629,14 +1629,20 @@ export async function handleMessage(
 
     case "UPLOAD_FILE": {
       if (!tabId) throw new Error("No tabId provided");
-      if (!message.ref) throw new Error("No ref provided");
       if (!message.files || !message.files.length) throw new Error("No files provided");
-      const selectorResult = await chrome.tabs.sendMessage(tabId, {
-        type: "GET_FILE_INPUT_SELECTOR",
-        ref: message.ref,
-      }, { frameId: getFrameIdForTab(tabId) });
-      if (selectorResult.error) throw new Error(selectorResult.error);
-      const setResult = await cdp.setFileInputBySelector(tabId, selectorResult.selector, message.files);
+
+      let selector = message.selector;
+      if (!selector) {
+        if (!message.ref) throw new Error("No ref or selector provided");
+        const selectorResult = await chrome.tabs.sendMessage(tabId, {
+          type: "GET_FILE_INPUT_SELECTOR",
+          ref: message.ref,
+        }, { frameId: getFrameIdForTab(tabId) });
+        if (selectorResult.error) throw new Error(selectorResult.error);
+        selector = selectorResult.selector;
+      }
+
+      const setResult = await cdp.setFileInputBySelector(tabId, selector, message.files);
       if (!setResult.success) throw new Error(setResult.error);
       return { success: true, filesSet: message.files.length };
     }

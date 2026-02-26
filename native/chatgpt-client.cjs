@@ -314,6 +314,90 @@ async function clickSend(cdp, inputCdp) {
   return true;
 }
 
+function normalizeFileList(file) {
+  if (!file) return [];
+  if (Array.isArray(file)) {
+    return file
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+  if (typeof file === "string") {
+    return file
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+async function waitForFileInputSelector(cdp, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const selector = await evaluate(
+      cdp,
+      `(() => {
+        ${buildClickDispatcher()}
+        const attr = "data-surf-file-input-id";
+        const pickInput = () => {
+          const inputs = Array.from(document.querySelectorAll('${SELECTORS.fileInput}'));
+          return inputs.find((input) => !input.disabled) || inputs[0] || null;
+        };
+        let input = pickInput();
+        if (!input) {
+          const attachSelectors = [
+            'button[data-testid*="composer-plus"]',
+            'button[data-testid*="attach"]',
+            'button[aria-label*="Attach"]',
+            'button[aria-label*="attach"]',
+            'button[aria-label*="Upload"]',
+            'button[aria-label*="upload"]',
+          ];
+          for (const selector of attachSelectors) {
+            const button = document.querySelector(selector);
+            if (button) {
+              dispatchClickSequence(button);
+              break;
+            }
+          }
+          input = pickInput();
+        }
+        if (!input) return null;
+        let id = input.getAttribute(attr);
+        if (!id) {
+          id = \`surf-upload-\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}\`;
+          input.setAttribute(attr, id);
+        }
+        return \`[\${attr}="\${id}"]\`;
+      })()`
+    );
+    if (typeof selector === "string" && selector.trim() !== "") {
+      return selector;
+    }
+    await delay(250);
+  }
+  return null;
+}
+
+async function uploadChatGPTFiles(cdp, uploadFile, tabId, file, log) {
+  const files = normalizeFileList(file);
+  if (files.length === 0) {
+    throw new Error("Invalid file path");
+  }
+  if (typeof uploadFile !== "function") {
+    throw new Error("File upload not supported by host");
+  }
+  const selector = await waitForFileInputSelector(cdp, 12000);
+  if (!selector) {
+    throw new Error("ChatGPT file input not found");
+  }
+  const result = await uploadFile(tabId, selector, files);
+  if (!result || result.error || result.success === false) {
+    throw new Error(result?.error || "File upload failed");
+  }
+  log(`Uploaded ${files.length} file(s)`);
+  await delay(500);
+}
+
 async function waitForResponse(cdp, timeoutMs = 2700000) {
   const deadline = Date.now() + timeoutMs;
   let previousLength = 0;
@@ -400,6 +484,7 @@ async function query(options) {
     closeTab,
     cdpEvaluate,
     cdpCommand,
+    uploadFile,
     log = () => {},
   } = options;
   const startTime = Date.now();
@@ -440,7 +525,7 @@ async function query(options) {
       log(`Selected model: ${selectedLabel}`);
     }
     if (file) {
-      throw new Error("File upload not yet implemented");
+      await uploadChatGPTFiles(cdp, uploadFile, tabId, file, log);
     }
     await typePrompt(cdp, inputCdp, prompt);
     log("Prompt typed");

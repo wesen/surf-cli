@@ -535,6 +535,16 @@ function handleToolRequest(msg, socket) {
           });
           writeMessage({ type: "CHATGPT_CDP_COMMAND", tabId, method, params, id: cmdId });
         }),
+        uploadFile: (tabId, selector, files) => new Promise((resolve) => {
+          const uploadId = ++requestCounter;
+          pendingToolRequests.set(uploadId, {
+            socket: null,
+            originalId: null,
+            tool: "upload_file",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "UPLOAD_FILE", tabId, selector, files, id: uploadId });
+        }),
         log: (msg) => log(`[chatgpt] ${msg}`)
       });
       
