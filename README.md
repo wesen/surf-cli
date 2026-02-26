@@ -309,6 +309,7 @@ Query AI models using your browser's logged-in session:
 ```bash
 # ChatGPT
 surf chatgpt "explain this code"
+surf chatgpt --list-models                   # List available models
 surf chatgpt "summarize" --with-page     # Include page context
 surf chatgpt "analyze" --model gpt-4o    # Specify model
 surf chatgpt "review" --file code.ts     # Attach file

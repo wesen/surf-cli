@@ -26,12 +26,13 @@ type NativeCaller interface {
 }
 
 type ChatGPTRequest struct {
-	Query    string
-	Model    string
-	WithPage bool
-	File     string
-	Timeout  time.Duration
-	TabID    *int64
+	Query      string
+	Model      string
+	ListModels bool
+	WithPage   bool
+	File       string
+	Timeout    time.Duration
+	TabID      *int64
 }
 
 func HandleChatGPTTool(ctx context.Context, caller NativeCaller, rawArgs map[string]any, tabID *int64, logf func(string, ...any)) (map[string]any, error) {
@@ -48,8 +49,9 @@ func parseChatGPTRequest(rawArgs map[string]any, tabID *int64) (ChatGPTRequest, 
 		args = map[string]any{}
 	}
 
+	listModels := asBool(args["list-models"]) || asBool(args["listModels"])
 	query := strings.TrimSpace(asString(args["query"]))
-	if query == "" {
+	if query == "" && !listModels {
 		return ChatGPTRequest{}, fmt.Errorf("query required")
 	}
 
@@ -63,12 +65,13 @@ func parseChatGPTRequest(rawArgs map[string]any, tabID *int64) (ChatGPTRequest, 
 	}
 
 	return ChatGPTRequest{
-		Query:    query,
-		Model:    strings.TrimSpace(asString(args["model"])),
-		WithPage: asBool(args["with-page"]) || asBool(args["withPage"]),
-		File:     strings.TrimSpace(asString(args["file"])),
-		Timeout:  timeout,
-		TabID:    tabID,
+		Query:      query,
+		Model:      strings.TrimSpace(asString(args["model"])),
+		ListModels: listModels,
+		WithPage:   asBool(args["with-page"]) || asBool(args["withPage"]),
+		File:       strings.TrimSpace(asString(args["file"])),
+		Timeout:    timeout,
+		TabID:      tabID,
 	}, nil
 }
 
@@ -92,7 +95,7 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 	}
 
 	fullPrompt := req.Query
-	if req.WithPage {
+	if !req.ListModels && req.WithPage {
 		pageMsg := map[string]any{"type": "GET_PAGE_TEXT"}
 		if req.TabID != nil {
 			pageMsg["tabId"] = *req.TabID
@@ -156,6 +159,18 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 	}
 	if !promptReady {
 		return nil, fmt.Errorf("Prompt textarea not ready")
+	}
+
+	if req.ListModels {
+		models, selected, err := bridge.listModels(ctx, 12*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"models":   models,
+			"selected": selected,
+			"tookMs":   time.Since(started).Milliseconds(),
+		}, nil
 	}
 
 	if req.Model != "" {
@@ -319,37 +334,44 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	normalized := normalizeModel(model)
 	target := toJSONString(normalized)
 
-	buttonExists, err := b.evaluate(ctx, `(() => Boolean(document.querySelector('[data-testid="model-switcher-dropdown-button"]')))()`, extCallTimeout)
-	if err != nil {
+	if err := b.openModelMenu(ctx, timeout); err != nil {
 		return err
 	}
-	if !asBool(buttonExists) {
-		return fmt.Errorf("Model selector button not found")
-	}
-
-	if _, err := b.evaluate(ctx, `(() => {
-	  const btn = document.querySelector('[data-testid="model-switcher-dropdown-button"]');
-	  if (btn) btn.click();
-	  return true;
-	})()`, extCallTimeout); err != nil {
-		return err
-	}
-	time.Sleep(300 * time.Millisecond)
 
 	deadline := time.Now().Add(timeout)
+	lastAvailable := []string{}
 	expr := fmt.Sprintf(`(() => {
+	  function dispatchClickSequence(target){
+	    if(!target || !(target instanceof EventTarget)) return false;
+	    const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+	    for (const type of types) {
+	      const common = { bubbles: true, cancelable: true, view: window };
+	      let event;
+	      if (type.startsWith('pointer') && 'PointerEvent' in window) {
+	        event = new PointerEvent(type, { ...common, pointerId: 1, pointerType: 'mouse' });
+	      } else {
+	        event = new MouseEvent(type, common);
+	      }
+	      target.dispatchEvent(event);
+	    }
+	    return true;
+	  }
 	  const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 	  const targetModel = %s;
 	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
 	  if (!menu) return { found: false, waiting: true };
 	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const available = [];
 	  let bestMatch = null;
 	  let bestScore = 0;
 	  for (const item of items) {
+	    const label = (item.textContent || '').trim().replace(/\s+/g, ' ');
 	    const text = normalize(item.textContent || '');
 	    const testId = normalize(item.getAttribute('data-testid') || '');
+	    if (label && !available.includes(label)) available.push(label);
 	    let score = 0;
-	    if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
+	    if (text === targetModel || testId === targetModel) score = 120;
+	    else if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
 	    else if (targetModel.includes(text) || targetModel.includes(testId)) score = 50;
 	    if (score > bestScore) {
 	      bestScore = score;
@@ -357,10 +379,10 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	    }
 	  }
 	  if (bestMatch) {
-	    bestMatch.click();
-	    return { found: true, success: true };
+	    dispatchClickSequence(bestMatch);
+	    return { found: true, success: true, available, label: (bestMatch.textContent || '').trim() };
 	  }
-	  return { found: true, success: false };
+	  return { found: true, success: false, available };
 	})()`, target)
 
 	for time.Now().Before(deadline) {
@@ -370,15 +392,108 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 		}
 		m, _ := v.(map[string]any)
 		if asBool(m["found"]) {
+			lastAvailable = toStringSlice(m["available"])
 			if asBool(m["success"]) {
 				return nil
+			}
+			if len(lastAvailable) > 0 {
+				return fmt.Errorf("Model not found: %s. Available: %s", model, strings.Join(lastAvailable, ", "))
 			}
 			return fmt.Errorf("Model not found: %s", model)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	if len(lastAvailable) > 0 {
+		return fmt.Errorf("Model not found: %s (timeout). Available: %s", model, strings.Join(lastAvailable, ", "))
+	}
 	return fmt.Errorf("Model not found: %s (timeout)", model)
+}
+
+func (b *chatGPTBridge) openModelMenu(ctx context.Context, timeout time.Duration) error {
+	buttonExists, err := b.evaluate(ctx, `(() => Boolean(document.querySelector('[data-testid="model-switcher-dropdown-button"]')))()`, extCallTimeout)
+	if err != nil {
+		return err
+	}
+	if !asBool(buttonExists) {
+		return fmt.Errorf("Model selector button not found")
+	}
+
+	openExpr := `(() => {
+	  function dispatchClickSequence(target){
+	    if(!target || !(target instanceof EventTarget)) return false;
+	    const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+	    for (const type of types) {
+	      const common = { bubbles: true, cancelable: true, view: window };
+	      let event;
+	      if (type.startsWith('pointer') && 'PointerEvent' in window) {
+	        event = new PointerEvent(type, { ...common, pointerId: 1, pointerType: 'mouse' });
+	      } else {
+	        event = new MouseEvent(type, common);
+	      }
+	      target.dispatchEvent(event);
+	    }
+	    return true;
+	  }
+	  const btn = document.querySelector('[data-testid="model-switcher-dropdown-button"]');
+	  if (!btn) return false;
+	  dispatchClickSequence(btn);
+	  return true;
+	})()`
+	if _, err := b.evaluate(ctx, openExpr, extCallTimeout); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		menuVisible, err := b.evaluate(ctx, `(() => Boolean(document.querySelector('[role="menu"], [data-radix-collection-root]')))()`, extCallTimeout)
+		if err != nil {
+			return err
+		}
+		if asBool(menuVisible) {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("Model selector menu did not open")
+}
+
+func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) ([]string, string, error) {
+	if err := b.openModelMenu(ctx, timeout); err != nil {
+		return nil, "", err
+	}
+	deadline := time.Now().Add(timeout)
+	expr := `(() => {
+	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
+	  if (!menu) return { found: false };
+	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const models = [];
+	  let selected = null;
+	  for (const item of items) {
+	    const label = (item.textContent || '').trim().replace(/\s+/g, ' ');
+	    if (!label) continue;
+	    if (!models.includes(label)) models.push(label);
+	    const ariaChecked = item.getAttribute('aria-checked');
+	    const dataState = item.getAttribute('data-state');
+	    if (ariaChecked === 'true' || dataState === 'checked') {
+	      selected = label;
+	    }
+	  }
+	  return { found: true, models, selected };
+	})()`
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, expr, extCallTimeout)
+		if err != nil {
+			return nil, "", err
+		}
+		m, _ := v.(map[string]any)
+		if asBool(m["found"]) {
+			models := toStringSlice(m["models"])
+			return models, strings.TrimSpace(asString(m["selected"])), nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return nil, "", fmt.Errorf("Failed to read ChatGPT models")
 }
 
 func (b *chatGPTBridge) typePrompt(ctx context.Context, prompt string) error {
@@ -730,4 +845,28 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func toStringSlice(v any) []string {
+	if direct, ok := v.([]string); ok {
+		return append([]string{}, direct...)
+	}
+	items, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		s := strings.TrimSpace(asString(item))
+		if s == "" {
+			continue
+		}
+		if _, exists := seen[s]; exists {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }

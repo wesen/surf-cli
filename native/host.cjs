@@ -561,6 +561,64 @@ function handleToolRequest(msg, socket) {
     
     return;
   }
+
+  if (extensionMsg.type === "CHATGPT_MODELS") {
+    const { timeout } = extensionMsg;
+
+    queueAiRequest(async () => {
+      const result = await chatgptClient.listModels({
+        timeout: timeout || 30000,
+        getCookies: () => new Promise((resolve) => {
+          const cookieId = ++requestCounter;
+          pendingToolRequests.set(cookieId, {
+            socket: null,
+            originalId: null,
+            tool: "get_cookies",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "GET_CHATGPT_COOKIES", id: cookieId });
+        }),
+        createTab: () => new Promise((resolve) => {
+          const tabCreateId = ++requestCounter;
+          pendingToolRequests.set(tabCreateId, {
+            socket: null,
+            originalId: null,
+            tool: "create_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "CHATGPT_NEW_TAB", id: tabCreateId });
+        }),
+        closeTab: (tabIdToClose) => new Promise((resolve) => {
+          const tabCloseId = ++requestCounter;
+          pendingToolRequests.set(tabCloseId, {
+            socket: null,
+            originalId: null,
+            tool: "close_tab",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "CHATGPT_CLOSE_TAB", tabId: tabIdToClose, id: tabCloseId });
+        }),
+        cdpEvaluate: (tabId, expression) => new Promise((resolve) => {
+          const evalId = ++requestCounter;
+          pendingToolRequests.set(evalId, {
+            socket: null,
+            originalId: null,
+            tool: "cdp_evaluate",
+            onComplete: (r) => resolve(r)
+          });
+          writeMessage({ type: "CHATGPT_EVALUATE", tabId, expression, id: evalId });
+        }),
+        log: (msg) => log(`[chatgpt] ${msg}`)
+      });
+      return result;
+    }).then((result) => {
+      sendToolResponse(socket, originalId, result, null);
+    }).catch((err) => {
+      sendToolResponse(socket, originalId, null, err.message);
+    });
+
+    return;
+  }
   
   if (extensionMsg.type === "PERPLEXITY_QUERY") {
     const { query, mode, model, withPage, timeout } = extensionMsg;

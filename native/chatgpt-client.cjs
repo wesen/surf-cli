@@ -131,6 +131,72 @@ async function waitForPromptReady(cdp, timeoutMs = 30000) {
 }
 
 async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
+  await openModelMenu(cdp);
+  const normalizedModel = desiredModel.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const deadline = Date.now() + timeoutMs;
+  let lastAvailable = [];
+  
+  while (Date.now() < deadline) {
+    const result = await evaluate(
+      cdp,
+      `(() => {
+        ${buildClickDispatcher()}
+        const targetModel = ${JSON.stringify(normalizedModel)};
+        const menuSelector = '${SELECTORS.menuContainer}';
+        const itemSelector = '${SELECTORS.menuItem}';
+        const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        
+        const menu = document.querySelector(menuSelector);
+        if (!menu) {
+          return { found: false, waiting: true };
+        }
+        const items = Array.from(menu.querySelectorAll(itemSelector));
+        const available = [];
+        let bestMatch = null;
+        let bestScore = 0;
+        for (const item of items) {
+          const label = (item.textContent || '').trim().replace(/\\s+/g, ' ');
+          const text = normalize(item.textContent || '');
+          const testId = normalize(item.getAttribute('data-testid') || '');
+          if (label && !available.includes(label)) available.push(label);
+          let score = 0;
+          if (text === targetModel || testId === targetModel) score = 120;
+          else if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
+          else if (targetModel.includes(text) || targetModel.includes(testId)) score = 50;
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = item;
+          }
+        }
+        if (bestMatch) {
+          dispatchClickSequence(bestMatch);
+          return { found: true, success: true, label: bestMatch.textContent?.trim(), available };
+        }
+        return { found: true, success: false, error: 'No matching model in menu', available };
+      })()`
+    );
+    
+    if (result && result.found) {
+      if (Array.isArray(result.available)) {
+        lastAvailable = result.available;
+      }
+      if (result.success) {
+        await delay(200);
+        return result.label;
+      }
+      const suffix = lastAvailable.length > 0 ? ` Available: ${lastAvailable.join(", ")}` : "";
+      throw new Error(`Model not found: ${desiredModel}.${suffix}`);
+    }
+    
+    await delay(100);
+  }
+  
+  const suffix = lastAvailable.length > 0 ? ` Available: ${lastAvailable.join(", ")}` : "";
+  throw new Error(`Model not found: ${desiredModel} (timeout).${suffix}`);
+}
+
+async function openModelMenu(cdp, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
   const modelButton = await evaluate(
     cdp,
     `(() => {
@@ -149,59 +215,51 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
       if (btn) dispatchClickSequence(btn);
     })()`
   );
-  await delay(300);
-  // Select from menu - loop in Node.js to avoid CDP timeout issues
-  const normalizedModel = desiredModel.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const deadline = Date.now() + timeoutMs;
-  
   while (Date.now() < deadline) {
-    const result = await evaluate(
+    const menuVisible = await evaluate(
       cdp,
-      `(() => {
-        ${buildClickDispatcher()}
-        const targetModel = ${JSON.stringify(normalizedModel)};
-        const menuSelector = '${SELECTORS.menuContainer}';
-        const itemSelector = '${SELECTORS.menuItem}';
-        const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        
-        const menu = document.querySelector(menuSelector);
-        if (!menu) {
-          return { found: false, waiting: true };
-        }
-        const items = Array.from(menu.querySelectorAll(itemSelector));
-        let bestMatch = null;
-        let bestScore = 0;
-        for (const item of items) {
-          const text = normalize(item.textContent || '');
-          const testId = normalize(item.getAttribute('data-testid') || '');
-          let score = 0;
-          if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
-          else if (targetModel.includes(text) || targetModel.includes(testId)) score = 50;
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = item;
-          }
-        }
-        if (bestMatch) {
-          dispatchClickSequence(bestMatch);
-          return { found: true, success: true, label: bestMatch.textContent?.trim() };
-        }
-        return { found: true, success: false, error: 'No matching model in menu' };
-      })()`
+      `(() => Boolean(document.querySelector('${SELECTORS.menuContainer}')))()`
     );
-    
-    if (result && result.found) {
-      if (result.success) {
-        await delay(200);
-        return result.label;
-      }
-      throw new Error(`Model not found: ${desiredModel}`);
-    }
-    
+    if (menuVisible) return;
     await delay(100);
   }
-  
-  throw new Error(`Model not found: ${desiredModel} (timeout)`);
+  throw new Error("Model selector menu did not open");
+}
+
+async function readModelList(cdp, timeoutMs = 8000) {
+  await openModelMenu(cdp, timeoutMs);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const snapshot = await evaluate(
+      cdp,
+      `(() => {
+        const menu = document.querySelector('${SELECTORS.menuContainer}');
+        if (!menu) return { found: false };
+        const items = Array.from(menu.querySelectorAll('${SELECTORS.menuItem}'));
+        const models = [];
+        let selected = null;
+        for (const item of items) {
+          const label = (item.textContent || '').trim().replace(/\\s+/g, ' ');
+          if (!label) continue;
+          if (!models.includes(label)) models.push(label);
+          const ariaChecked = item.getAttribute('aria-checked');
+          const dataState = item.getAttribute('data-state');
+          if (ariaChecked === 'true' || dataState === 'checked') {
+            selected = label;
+          }
+        }
+        return { found: true, models, selected };
+      })()`
+    );
+    if (snapshot && snapshot.found) {
+      return {
+        models: Array.isArray(snapshot.models) ? snapshot.models : [],
+        selected: typeof snapshot.selected === "string" && snapshot.selected ? snapshot.selected : null,
+      };
+    }
+    await delay(100);
+  }
+  throw new Error("Failed to read ChatGPT models");
 }
 
 async function typePrompt(cdp, inputCdp, prompt) {
@@ -544,4 +602,49 @@ async function query(options) {
   }
 }
 
-module.exports = { query, hasRequiredCookies, CHATGPT_URL };
+async function listModels(options) {
+  const {
+    timeout = 30000,
+    getCookies,
+    createTab,
+    closeTab,
+    cdpEvaluate,
+    log = () => {},
+  } = options;
+  const startTime = Date.now();
+  log("Listing ChatGPT models");
+  const { cookies } = await getCookies();
+  if (!hasRequiredCookies(cookies)) {
+    throw new Error("ChatGPT login required");
+  }
+  const tabInfo = await createTab();
+  const { tabId } = tabInfo;
+  if (!tabId) {
+    throw new Error("Failed to create ChatGPT tab");
+  }
+  const cdp = (expr) => cdpEvaluate(tabId, expr);
+  try {
+    await waitForPageLoad(cdp);
+    if (await isCloudflareBlocked(cdp)) {
+      throw new Error("Cloudflare challenge detected - complete in browser");
+    }
+    const loginStatus = await checkLoginStatus(cdp);
+    if (loginStatus.status !== 200 || loginStatus.hasLoginCta) {
+      throw new Error("ChatGPT login required");
+    }
+    const promptReady = await waitForPromptReady(cdp);
+    if (!promptReady) {
+      throw new Error("Prompt textarea not ready");
+    }
+    const snapshot = await readModelList(cdp, Math.min(timeout, 20000));
+    return {
+      models: snapshot.models,
+      selected: snapshot.selected,
+      tookMs: Date.now() - startTime,
+    };
+  } finally {
+    await closeTab(tabId).catch(() => {});
+  }
+}
+
+module.exports = { query, listModels, hasRequiredCookies, CHATGPT_URL };

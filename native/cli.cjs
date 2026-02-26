@@ -367,11 +367,13 @@ const TOOLS = {
         opts: { 
           "with-page": "Include current page context",
           model: "Model: gpt-4o, o1, etc.",
+          "list-models": "List available ChatGPT models (no query required)",
           file: "Attach file",
           timeout: "Timeout in seconds (default: 2700 = 45min)"
         },
         examples: [
           { cmd: 'chatgpt "explain this code"', desc: "Basic query" },
+          { cmd: 'chatgpt --list-models', desc: "List available models" },
           { cmd: 'chatgpt "summarize" --with-page', desc: "With page context" },
           { cmd: 'chatgpt "review" --file code.ts', desc: "With file" },
           { cmd: 'chatgpt "analyze" --model gpt-4o', desc: "Specify model" },
@@ -3168,6 +3170,19 @@ async function handleResponse(response) {
     for (const [key, val] of Object.entries(data.paths)) {
       console.log(`${key}: ${val}`);
     }
+  } else if (tool === "chatgpt" && Array.isArray(data?.models)) {
+    if (data.models.length === 0) {
+      console.log("No ChatGPT models found");
+    } else {
+      for (const modelName of data.models) {
+        if (data.selected && data.selected === modelName) {
+          console.log(`* ${modelName} (selected)`);
+        } else {
+          console.log(`* ${modelName}`);
+        }
+      }
+    }
+    console.error(`\n[${((data.tookMs || 0) / 1000).toFixed(1)}s]`);
   } else if ((tool === "chatgpt" || tool === "gemini") && data?.response) {
     console.log(data.response);
     if (data.imagePath) {

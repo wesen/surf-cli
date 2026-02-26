@@ -102,6 +102,52 @@ describe("chatgpt-client", () => {
       true,
     );
     expect(chatgptClient.hasRequiredCookies([{ name: "other", value: "x" }])).toBe(false);
+    expect(chatgptClient.listModels).toBeInstanceOf(Function);
     expect(chatgptClient.CHATGPT_URL).toBe("https://chatgpt.com/");
+  });
+
+  it("lists available models", async () => {
+    const cdpEvaluate = async (_tabId: number, expression: string): Promise<CdpEvalResult> => {
+      switch (true) {
+        case expression.includes("document.readyState"):
+          return { result: { value: "complete" } };
+        case expression.includes("document.title.toLowerCase"):
+          return { result: { value: "chatgpt" } };
+        case expression.includes("challenge-platform"):
+          return { result: { value: false } };
+        case expression.includes("backend-api/me"):
+          return { result: { value: { status: 200, hasLoginCta: false } } };
+        case expression.includes("!node.hasAttribute('disabled')"):
+          return { result: { value: true } };
+        case expression.includes("model-switcher-dropdown-button"):
+          return { result: { value: true } };
+        case expression.includes("const menu = document.querySelector"):
+          return {
+            result: {
+              value: {
+                found: true,
+                models: ["GPT-4o", "o1"],
+                selected: "GPT-4o",
+              },
+            },
+          };
+        default:
+          return { result: { value: true } };
+      }
+    };
+
+    const result = await chatgptClient.listModels({
+      timeout: 30000,
+      getCookies: async () => ({
+        cookies: [{ name: "__Secure-next-auth.session-token", value: "abc" }],
+      }),
+      createTab: async () => ({ tabId: 77 }),
+      closeTab: async () => {},
+      cdpEvaluate,
+      log: () => {},
+    });
+
+    expect(result.models).toEqual(["GPT-4o", "o1"]);
+    expect(result.selected).toBe("GPT-4o");
   });
 });

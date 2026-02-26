@@ -23,6 +23,18 @@ func TestParseChatGPTRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("allows list-models without query", func(t *testing.T) {
+		req, err := parseChatGPTRequest(map[string]any{
+			"list-models": true,
+		}, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !req.ListModels {
+			t.Fatalf("expected list models flag")
+		}
+	})
+
 	t.Run("parses options", func(t *testing.T) {
 		id := int64(7)
 		req, err := parseChatGPTRequest(map[string]any{
@@ -241,5 +253,61 @@ func TestHandleChatGPTToolWithFileUpload(t *testing.T) {
 	}
 	if len(uploadedFiles) != 1 || uploadedFiles[0] != "/tmp/demo.txt" {
 		t.Fatalf("unexpected uploaded files: %#v", uploadedFiles)
+	}
+}
+
+func TestHandleChatGPTToolListModels(t *testing.T) {
+	caller := &fakeNativeCaller{handler: func(msg map[string]any) (map[string]any, error) {
+		switch msg["type"] {
+		case "GET_CHATGPT_COOKIES":
+			return map[string]any{"cookies": []any{map[string]any{"name": "__Secure-next-auth.session-token", "value": "abc"}}}, nil
+		case "CHATGPT_NEW_TAB":
+			return map[string]any{"tabId": int64(17)}, nil
+		case "CHATGPT_CLOSE_TAB":
+			return map[string]any{"success": true}, nil
+		case "CHATGPT_EVALUATE":
+			expr := asString(msg["expression"])
+			switch {
+			case strings.Contains(expr, "document.readyState"):
+				return map[string]any{"result": map[string]any{"value": "complete"}}, nil
+			case strings.Contains(expr, "document.title.toLowerCase"):
+				return map[string]any{"result": map[string]any{"value": "chatgpt"}}, nil
+			case strings.Contains(expr, "challenge-platform"):
+				return map[string]any{"result": map[string]any{"value": false}}, nil
+			case strings.Contains(expr, "backend-api/me"):
+				return map[string]any{"result": map[string]any{"value": map[string]any{"status": float64(200), "hasLoginCta": false}}}, nil
+			case strings.Contains(expr, "!node.hasAttribute('disabled')"):
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			case strings.Contains(expr, "model-switcher-dropdown-button"):
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			case strings.Contains(expr, "const menu = document.querySelector"):
+				return map[string]any{"result": map[string]any{"value": map[string]any{
+					"found":    true,
+					"models":   []any{"GPT-4o", "o1"},
+					"selected": "GPT-4o",
+				}}}, nil
+			default:
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			}
+		default:
+			return map[string]any{"ok": true}, nil
+		}
+	}}
+
+	resp, err := HandleChatGPTTool(context.Background(), caller, map[string]any{
+		"list-models": true,
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	models, ok := resp["models"].([]string)
+	if !ok {
+		t.Fatalf("expected string models slice, got %#v", resp["models"])
+	}
+	if len(models) != 2 || models[0] != "GPT-4o" || models[1] != "o1" {
+		t.Fatalf("unexpected models: %#v", models)
+	}
+	if asString(resp["selected"]) != "GPT-4o" {
+		t.Fatalf("unexpected selected: %#v", resp["selected"])
 	}
 }

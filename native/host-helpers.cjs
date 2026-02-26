@@ -45,7 +45,7 @@ function formatToolContent(result, log = () => {}) {
   }
   
   // Handle select response
-  if (result.selected !== undefined) {
+  if (result.selected !== undefined && result.models === undefined) {
     let output = Array.isArray(result.selected) 
       ? `Selected: ${result.selected.join(', ')}`
       : `Selected: ${result.selected}`;
@@ -101,6 +101,17 @@ function formatToolContent(result, log = () => {}) {
       output += `\n\n**Warnings:**\n${result.warnings.map(w => `- ${w}`).join('\n')}`;
     }
     return text(output);
+  }
+
+  // Handle ChatGPT model listing
+  if (result.models && Array.isArray(result.models) && result.tookMs !== undefined) {
+    if (result.models.length === 0) {
+      return text("No ChatGPT models found");
+    }
+    const lines = result.models.map((m) =>
+      result.selected && m === result.selected ? `* ${m} (selected)` : `* ${m}`
+    );
+    return text(lines.join("\n"));
   }
   
   if (result.messages && Array.isArray(result.messages)) {
@@ -1019,6 +1030,13 @@ function mapToolToMessage(tool, args, tabId) {
       if (!a.query) throw new Error("query required");
       return { type: "HISTORY_SEARCH", query: a.query, limit: a.limit !== undefined ? parseInt(a.limit, 10) : 20 };
     case "chatgpt":
+      if (a["list-models"] || a.listModels) {
+        return {
+          type: "CHATGPT_MODELS",
+          timeout: a.timeout ? parseInt(a.timeout, 10) * 1000 : 30000,
+          ...baseMsg
+        };
+      }
       if (!a.query) throw new Error("query required");
       return { 
         type: "CHATGPT_QUERY", 

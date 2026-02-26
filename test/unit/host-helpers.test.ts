@@ -82,6 +82,13 @@ describe("mapToolToMessage", () => {
     });
   });
 
+  describe("chatgpt commands", () => {
+    it("maps chatgpt --list-models without query", () => {
+      const msg = helpers.mapToolToMessage("chatgpt", { "list-models": true });
+      expect(msg.type).toBe("CHATGPT_MODELS");
+    });
+  });
+
   describe("error cases", () => {
     it("returns null for unknown tool", () => {
       expect(helpers.mapToolToMessage("unknown.command", {})).toBeNull();
@@ -141,6 +148,16 @@ describe("formatToolContent", () => {
     it("returns OK for null/undefined", () => {
       expect(helpers.formatToolContent(null)[0].text).toBe("OK");
       expect(helpers.formatToolContent(undefined)[0].text).toBe("OK");
+    });
+
+    it("formats chatgpt model list", () => {
+      const result = helpers.formatToolContent({
+        models: ["GPT-4o", "o1"],
+        selected: "GPT-4o",
+        tookMs: 1000,
+      });
+      expect(result[0].text).toContain("* GPT-4o (selected)");
+      expect(result[0].text).toContain("* o1");
     });
   });
 });

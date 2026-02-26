@@ -108,6 +108,7 @@ Test ChatGPT through raw tool path:
 ```bash
 cd go
 go run ./cmd/surf-go tool-raw --tool chatgpt --args-json '{"query":"say ping"}'
+go run ./cmd/surf-go tool-raw --tool chatgpt --args-json '{"list-models":true}'
 ```
 
 ## 5) Build From Source (Repo Checkout)
