@@ -13,6 +13,8 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: go/cmd/surf-go/integration_test.go
+      Note: Verifies YAML default output setting
     - Path: go/internal/cli/commands/format.go
       Note: |-
         New response parser and structured row shaping logic
@@ -21,6 +23,8 @@ RelatedFiles:
       Note: |-
         Unit tests validating structured text parsing
         Structured parsing unit tests
+    - Path: go/internal/cli/commands/glazed_defaults.go
+      Note: YAML default output section helper
     - Path: go/internal/cli/commands/navigate.go
       Note: |-
         Passes tool name to shared formatter
@@ -51,6 +55,7 @@ LastUpdated: 2026-02-25T18:56:00-05:00
 WhatFor: Track concrete output-parity progress and remaining schema gaps during Go CLI migration
 WhenToUse: Use when validating JSON output quality/parity or debugging formatter regressions
 ---
+
 
 
 # Node vs Go Output Format Investigation (Structured JSON)
@@ -174,3 +179,35 @@ cd go && go run ./cmd/surf-go page read --output json \
 - `reference/03-manual-browser-validation-checklist.md`
 - `sources/output-compare/2026-02-25T23-45-57-027Z`
 - `sources/output-compare/2026-02-25T23-48-23-122Z`
+
+## Update - Payload-only row + YAML default (2026-02-25)
+
+Implemented follow-up simplification per request:
+
+- Tool rows now emit only one field: `data`.
+- `data` contains:
+  - parsed object/array when response text is JSON,
+  - plain response text otherwise.
+- Default Glazed output is now actually `yaml` (verified via `--print-parsed-fields`), not just in help text.
+
+Current practical shape examples:
+
+- `tab list --output json`:
+
+```json
+[
+  { "data": [ { "id": 441388236, "title": "..." } ] }
+]
+```
+
+- `page state` (default output):
+
+```yaml
+data:
+  id: 57
+  title: Example Domain
+  url: https://example.org/
+  ...
+```
+
+Remaining intentional difference from Node CLI: Go still emits row array wrappers (`[{"data": ...}]`) instead of raw top-level payloads.

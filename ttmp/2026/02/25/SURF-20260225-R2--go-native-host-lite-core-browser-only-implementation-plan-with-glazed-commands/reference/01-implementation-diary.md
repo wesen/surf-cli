@@ -13,10 +13,14 @@ DocType: reference
 Intent: long-term
 Owners: []
 RelatedFiles:
+    - Path: go/cmd/surf-go/integration_test.go
+      Note: Step 19 default-output assertion
     - Path: go/internal/cli/commands/format.go
       Note: Structured formatter update captured in Step 18
     - Path: go/internal/cli/commands/format_test.go
       Note: Formatter parsing tests captured in Step 18
+    - Path: go/internal/cli/commands/glazed_defaults.go
+      Note: Step 19 YAML default wiring
     - Path: native/host-helpers.cjs
       Note: Command/tool mapping inventory baseline
     - Path: native/host.cjs
@@ -37,6 +41,7 @@ LastUpdated: 2026-02-25T17:39:00-05:00
 WhatFor: Preserve exact planning context, evidence, and command trace for continuation
 WhenToUse: Use when continuing implementation from this planning ticket
 ---
+
 
 
 # Implementation Diary
@@ -737,3 +742,97 @@ I ran a fresh live comparison against the currently running extension socket, ca
   - `sources/output-compare/2026-02-25T23-48-23-122Z`
 - Shape diff artifact:
   - `sources/output-compare/2026-02-25T23-48-23-122Z/SHAPE-DIFF-vs-2026-02-25T23-45-57-027Z.md`
+
+## Step 19: Simplify Go output payload and switch Glazed default to YAML
+
+This step implemented the requested output-shape simplification: surf-go rows now carry only a single `data` field instead of the expanded wrapper fields introduced earlier. The practical effect is that command payloads are closer to the Node CLI shape because object/array results are exposed directly under one predictable key and text responses also flow through that same key.
+
+In parallel, I changed the Glazed output default to `yaml` at the schema default layer (not only Cobra flag display defaults), because runtime parsing was still using `table` when only pflag defaults were changed.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, so start with returning the `data` field, not all the fields around it, so that at least the data matches the node version, and set yaml as the default output format for glazed output"
+
+**Assistant interpretation:** Replace the richer row envelope with a minimal payload field for command outputs and make YAML the actual default formatter for surf-go.
+
+**Inferred user intent:** Improve practical compatibility and ergonomics immediately, without waiting for full Node top-level parity mode.
+
+**Commit (code):** efd5f70 — "feat(surf-go): emit payload-only data rows and default to yaml"
+
+### What I did
+
+- Updated formatter row shaping in:
+  - `go/internal/cli/commands/format.go`
+- Added/updated formatter tests in:
+  - `go/internal/cli/commands/format_test.go`
+- Added Glazed schema helper with YAML output default:
+  - `go/internal/cli/commands/glazed_defaults.go`
+- Switched command constructors to use new helper:
+  - `go/internal/cli/commands/tool_simple.go`
+  - `go/internal/cli/commands/tool_raw.go`
+  - `go/internal/cli/commands/navigate.go`
+  - `go/internal/cli/commands/stream_simple.go`
+- Kept command-level default assertion in integration tests:
+  - `go/cmd/surf-go/integration_test.go`
+
+### Why
+
+- User asked for payload-first output rather than metadata-heavy rows.
+- YAML default should apply to actual parsed Glazed defaults, not only to help text.
+
+### What worked
+
+- `go test ./...` passes.
+- Live checks confirm parsed default now reports `glazed.output: yaml`.
+- Live checks confirm default runtime output is YAML.
+- `--output json` now yields rows with only `data` key.
+
+### What didn't work
+
+- Initial attempt to set YAML by mutating Cobra `output` flag defaults only changed help text but not parsed defaults.
+- Initial attempt to use `schema.WithDefaults(&settings.OutputFormatterSettings{Output:"yaml"})` failed due zero-value validation on unrelated output fields.
+
+### What I learned
+
+- Glazed defaults need to be set in section defaults; pflag-level default tweaks are insufficient for runtime defaults.
+- A narrow defaults struct with only the targeted tagged field avoids validation issues from unrelated zero-values.
+
+### What was tricky to build
+
+- The tricky part was a mismatch between displayed CLI defaults and actual parsed defaults. Symptoms were: `--help` showed `default "yaml"` while `--print-parsed-fields` still reported `output: table`.
+- Solution: apply `schema.WithDefaults` to Glazed output section using a minimal struct tagged only with `glazed:"output"`.
+
+### What warrants a second pair of eyes
+
+- Whether error rows should remain as `data: {tool,error}` or move to hard command errors for non-zero exits.
+- Whether stream commands should also collapse to `data` for symmetry (currently they emit `stream_type/event_type/event`).
+
+### What should be done in the future
+
+1. Add optional `--shape node` mode for exact top-level Node parity (object/array/string without row envelope).
+2. Decide final error contract for command failures under the simplified `data` schema.
+
+### Code review instructions
+
+- Start in `go/internal/cli/commands/format.go` and `go/internal/cli/commands/glazed_defaults.go`.
+- Validate with:
+  - `cd go && go test ./...`
+  - `cd go && SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" go run ./cmd/surf-go page state --print-parsed-fields`
+  - `cd go && SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" go run ./cmd/surf-go page state`
+  - `cd go && SURF_SOCKET_PATH="$HOME/snap/chromium/common/surf-cli/surf.sock" go run ./cmd/surf-go tab list --output json`
+
+### Technical details
+
+- Example current JSON shape:
+
+```json
+[
+  {
+    "data": [
+      {"id": 1, "title": "..."}
+    ]
+  }
+]
+```
+
+- Example current default (no `--output`): YAML document with top-level `data` key.
