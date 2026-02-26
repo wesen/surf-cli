@@ -38,3 +38,12 @@
 - [x] Task 6: Run `go test ./...` in `go/` and fix regressions.
 - [ ] Task 7: Validate local CLI behavior against running extension (if environment available), otherwise capture exact manual test handoff for browser-side verification.
 - [x] Task 8: Update diary with detailed command log/results and commit each completed task incrementally.
+
+## ChatGPT File Upload Follow-up (current execution)
+
+- [x] Task 9: Confirm extension has reusable file-upload primitive and identify missing Node/Go wiring points.
+- [x] Task 10: Implement selector-based `UPLOAD_FILE` path in service worker for provider automations.
+- [x] Task 11: Implement Node ChatGPT client/host file upload flow using `UPLOAD_FILE`.
+- [x] Task 12: Implement Go ChatGPT provider file upload flow using `UPLOAD_FILE`.
+- [x] Task 13: Add/extend tests for Node and Go upload flow.
+- [x] Task 14: Run targeted and broad test suites and capture exact outcomes in diary.

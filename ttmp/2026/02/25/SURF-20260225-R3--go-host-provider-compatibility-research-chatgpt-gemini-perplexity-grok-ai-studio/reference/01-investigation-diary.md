@@ -21,7 +21,7 @@ RelatedFiles:
       Note: Generated inventory artifact
 ExternalSources: []
 Summary: Chronological log of all investigation commands, findings, fixes, and delivery steps for provider compatibility research.
-LastUpdated: 2026-02-25T19:43:23-05:00
+LastUpdated: 2026-02-26T20:20:00-05:00
 WhatFor: Preserve reproducible investigation history for continuation and review.
 WhenToUse: Use when implementing provider support or auditing why design decisions were made.
 ---
@@ -370,3 +370,69 @@ Handoff requirement:
 
 1. Tasks 1-6 and 8 are complete.
 2. Task 7 remains pending user-side browser validation under confirmed `core-go` runtime profile.
+
+### Entry 7 - ChatGPT file upload implementation (2026-02-26 20:0x EST)
+
+Goal:
+1. Implement `chatgpt --file` support end-to-end for Node and Go runtimes.
+2. Keep behavior aligned by reusing existing extension `UPLOAD_FILE` primitive.
+
+Discovery commands:
+
+```bash
+rg -n "File upload not yet implemented|UPLOAD_FILE|GET_FILE_INPUT_SELECTOR|chatgpt" native src go/internal/host/providers go/cmd/surf-host-go
+sed -n '1570,1705p' src/service-worker/index.ts
+sed -n '400,520p' native/chatgpt-client.cjs
+sed -n '430,560p' native/host.cjs
+sed -n '1,280p' go/internal/host/providers/chatgpt.go
+```
+
+Findings:
+1. Both Node and Go ChatGPT paths explicitly returned `File upload not yet implemented`.
+2. Service worker already had `UPLOAD_FILE` backed by CDP `setFileInputBySelector`, but required `ref`.
+3. Provider automation lacked a stable `ref`, so selector-based upload support was the cleanest bridge.
+
+Implementation changes:
+1. `src/service-worker/index.ts`
+   - Extended `UPLOAD_FILE` to accept either:
+     - `selector` (new path), or
+     - `ref` (legacy path via content-script `GET_FILE_INPUT_SELECTOR`).
+2. `native/chatgpt-client.cjs`
+   - Added file list normalization.
+   - Added file input discovery (`waitForFileInputSelector`) that tags discovered input with `data-surf-file-input-id`.
+   - Added upload orchestration (`uploadChatGPTFiles`) and integrated into `query()`.
+3. `native/host.cjs`
+   - Added `uploadFile(tabId, selector, files)` callback for ChatGPT query flow, sending `UPLOAD_FILE`.
+4. `go/internal/host/providers/chatgpt.go`
+   - Replaced placeholder error with real upload flow:
+     - split file list,
+     - find file input selector in ChatGPT tab,
+     - call extension `UPLOAD_FILE`.
+
+Test additions:
+1. New Node unit test file: `test/unit/chatgpt-client.test.ts`.
+   - Verifies upload call is issued with selector + file list.
+   - Verifies upload error propagation.
+2. Added Go unit test: `TestHandleChatGPTToolWithFileUpload` in `go/internal/host/providers/chatgpt_test.go`.
+
+Validation commands and outcomes:
+
+```bash
+cd go && go test ./internal/host/providers ./cmd/surf-host-go
+npm test -- test/unit/chatgpt-client.test.ts
+cd go && go test ./...
+```
+
+Result:
+1. All listed Go tests passed.
+2. New Node ChatGPT unit tests passed (3/3).
+
+Additional check attempted:
+
+```bash
+npx biome check native/chatgpt-client.cjs native/host.cjs src/service-worker/index.ts test/unit/chatgpt-client.test.ts
+```
+
+Outcome:
+1. Failed due existing repository Biome config/version mismatch (`biome.json` schema 2.3.11 vs CLI 2.4.4) and unrelated rule key compatibility.
+2. No code changes made for this; issue pre-exists in repo tooling config.
