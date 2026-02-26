@@ -375,9 +375,45 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	  };
 	  const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 	  const targetModel = %s;
-	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
-	  if (!menu) return { found: false, waiting: true };
-	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const isVisible = (el) => {
+	    if (!el) return false;
+	    const style = window.getComputedStyle(el);
+	    const rect = el.getBoundingClientRect();
+	    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+	  };
+	  const collectItems = () => {
+	    const items = [];
+	    const seen = new Set();
+	    const pushIfVisible = (el) => {
+	      if (!el || seen.has(el) || !isVisible(el)) return;
+	      seen.add(el);
+	      items.push(el);
+	    };
+	    for (const el of Array.from(document.querySelectorAll('[data-testid*="model-switcher-"]'))) {
+	      pushIfVisible(el);
+	    }
+	    for (const root of Array.from(document.querySelectorAll('[role="menu"], [data-radix-collection-root]'))) {
+	      for (const el of Array.from(root.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'))) {
+	        pushIfVisible(el);
+	      }
+	    }
+	    return items;
+	  };
+	  const openLegacySubmenu = (item) => {
+	    if (!item) return;
+	    dispatchClickSequence(item);
+	    const common = { bubbles: true, cancelable: true, view: window };
+	    if ('PointerEvent' in window) {
+	      item.dispatchEvent(new PointerEvent('pointerover', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	      item.dispatchEvent(new PointerEvent('pointerenter', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	      item.dispatchEvent(new PointerEvent('pointermove', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	    }
+	    item.dispatchEvent(new MouseEvent('mouseover', common));
+	    item.dispatchEvent(new MouseEvent('mouseenter', common));
+	    item.dispatchEvent(new MouseEvent('mousemove', common));
+	  };
+	  const items = collectItems();
+	  if (items.length === 0) return { found: false, waiting: true };
 	  const legacyToggle = items.find((item) => {
 	    const labelNorm = normalize(item.getAttribute('aria-label') || item.textContent || '');
 	    const testIdNorm = normalize(item.getAttribute('data-testid') || '');
@@ -386,10 +422,10 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	  if (legacyToggle) {
 	    const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
 	                     legacyToggle.getAttribute('data-state') === 'open';
-	    const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
-	    if (!expanded && attempts < 2) {
-	      menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
-	      dispatchClickSequence(legacyToggle);
+	    const attempts = Number(document.documentElement.getAttribute('data-surf-legacy-open-attempts') || '0');
+	    if (!expanded && attempts < 3) {
+	      document.documentElement.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+	      openLegacySubmenu(legacyToggle);
 	      return { found: false, waiting: true };
 	    }
 	  }
@@ -530,9 +566,45 @@ func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) (
 	    if (reasoningMatch) return reasoningMatch[1];
 	    return '';
 	  };
-	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
-	  if (!menu) return { found: false };
-	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const isVisible = (el) => {
+	    if (!el) return false;
+	    const style = window.getComputedStyle(el);
+	    const rect = el.getBoundingClientRect();
+	    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+	  };
+	  const collectItems = () => {
+	    const items = [];
+	    const seen = new Set();
+	    const pushIfVisible = (el) => {
+	      if (!el || seen.has(el) || !isVisible(el)) return;
+	      seen.add(el);
+	      items.push(el);
+	    };
+	    for (const el of Array.from(document.querySelectorAll('[data-testid*="model-switcher-"]'))) {
+	      pushIfVisible(el);
+	    }
+	    for (const root of Array.from(document.querySelectorAll('[role="menu"], [data-radix-collection-root]'))) {
+	      for (const el of Array.from(root.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'))) {
+	        pushIfVisible(el);
+	      }
+	    }
+	    return items;
+	  };
+	  const openLegacySubmenu = (item) => {
+	    if (!item) return;
+	    dispatchClickSequence(item);
+	    const common = { bubbles: true, cancelable: true, view: window };
+	    if ('PointerEvent' in window) {
+	      item.dispatchEvent(new PointerEvent('pointerover', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	      item.dispatchEvent(new PointerEvent('pointerenter', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	      item.dispatchEvent(new PointerEvent('pointermove', { ...common, pointerId: 1, pointerType: 'mouse' }));
+	    }
+	    item.dispatchEvent(new MouseEvent('mouseover', common));
+	    item.dispatchEvent(new MouseEvent('mouseenter', common));
+	    item.dispatchEvent(new MouseEvent('mousemove', common));
+	  };
+	  const items = collectItems();
+	  if (items.length === 0) return { found: false };
 	  const legacyToggle = items.find((item) => {
 	    const labelNorm = (item.getAttribute('aria-label') || item.textContent || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 	    const testIdNorm = (item.getAttribute('data-testid') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -541,10 +613,10 @@ func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) (
 	  if (legacyToggle) {
 	    const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
 	                     legacyToggle.getAttribute('data-state') === 'open';
-	    const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
-	    if (!expanded && attempts < 2) {
-	      menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
-	      dispatchClickSequence(legacyToggle);
+	    const attempts = Number(document.documentElement.getAttribute('data-surf-legacy-open-attempts') || '0');
+	    if (!expanded && attempts < 3) {
+	      document.documentElement.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+	      openLegacySubmenu(legacyToggle);
 	      return { found: false };
 	    }
 	  }

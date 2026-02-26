@@ -162,12 +162,48 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
         const menuSelector = '${SELECTORS.menuContainer}';
         const itemSelector = '${SELECTORS.menuItem}';
         const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isVisible = (el) => {
+          if (!el) return false;
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const collectItems = () => {
+          const items = [];
+          const seen = new Set();
+          const pushIfVisible = (el) => {
+            if (!el || seen.has(el) || !isVisible(el)) return;
+            seen.add(el);
+            items.push(el);
+          };
+          for (const el of Array.from(document.querySelectorAll('[data-testid*="model-switcher-"]'))) {
+            pushIfVisible(el);
+          }
+          for (const root of Array.from(document.querySelectorAll(menuSelector))) {
+            for (const el of Array.from(root.querySelectorAll(itemSelector))) {
+              pushIfVisible(el);
+            }
+          }
+          return items;
+        };
+        const openLegacySubmenu = (item) => {
+          if (!item) return;
+          dispatchClickSequence(item);
+          const common = { bubbles: true, cancelable: true, view: window };
+          if ('PointerEvent' in window) {
+            item.dispatchEvent(new PointerEvent('pointerover', { ...common, pointerId: 1, pointerType: 'mouse' }));
+            item.dispatchEvent(new PointerEvent('pointerenter', { ...common, pointerId: 1, pointerType: 'mouse' }));
+            item.dispatchEvent(new PointerEvent('pointermove', { ...common, pointerId: 1, pointerType: 'mouse' }));
+          }
+          item.dispatchEvent(new MouseEvent('mouseover', common));
+          item.dispatchEvent(new MouseEvent('mouseenter', common));
+          item.dispatchEvent(new MouseEvent('mousemove', common));
+        };
         
-        const menu = document.querySelector(menuSelector);
-        if (!menu) {
+        const items = collectItems();
+        if (items.length === 0) {
           return { found: false, waiting: true };
         }
-        const items = Array.from(menu.querySelectorAll(itemSelector));
         const legacyToggle = items.find((item) => {
           const labelNorm = normalize(item.getAttribute('aria-label') || item.textContent || '');
           const testIdNorm = normalize(item.getAttribute('data-testid') || '');
@@ -176,10 +212,10 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
         if (legacyToggle) {
           const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
                            legacyToggle.getAttribute('data-state') === 'open';
-          const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
-          if (!expanded && attempts < 2) {
-            menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
-            dispatchClickSequence(legacyToggle);
+          const attempts = Number(document.documentElement.getAttribute('data-surf-legacy-open-attempts') || '0');
+          if (!expanded && attempts < 3) {
+            document.documentElement.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+            openLegacySubmenu(legacyToggle);
             return { found: false, waiting: true };
           }
         }
@@ -285,9 +321,45 @@ async function readModelList(cdp, timeoutMs = 8000) {
           if (reasoningMatch) return reasoningMatch[1];
           return '';
         };
-        const menu = document.querySelector('${SELECTORS.menuContainer}');
-        if (!menu) return { found: false };
-        const items = Array.from(menu.querySelectorAll('${SELECTORS.menuItem}'));
+        const isVisible = (el) => {
+          if (!el) return false;
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const collectItems = () => {
+          const items = [];
+          const seen = new Set();
+          const pushIfVisible = (el) => {
+            if (!el || seen.has(el) || !isVisible(el)) return;
+            seen.add(el);
+            items.push(el);
+          };
+          for (const el of Array.from(document.querySelectorAll('[data-testid*="model-switcher-"]'))) {
+            pushIfVisible(el);
+          }
+          for (const root of Array.from(document.querySelectorAll('${SELECTORS.menuContainer}'))) {
+            for (const el of Array.from(root.querySelectorAll('${SELECTORS.menuItem}'))) {
+              pushIfVisible(el);
+            }
+          }
+          return items;
+        };
+        const openLegacySubmenu = (item) => {
+          if (!item) return;
+          dispatchClickSequence(item);
+          const common = { bubbles: true, cancelable: true, view: window };
+          if ('PointerEvent' in window) {
+            item.dispatchEvent(new PointerEvent('pointerover', { ...common, pointerId: 1, pointerType: 'mouse' }));
+            item.dispatchEvent(new PointerEvent('pointerenter', { ...common, pointerId: 1, pointerType: 'mouse' }));
+            item.dispatchEvent(new PointerEvent('pointermove', { ...common, pointerId: 1, pointerType: 'mouse' }));
+          }
+          item.dispatchEvent(new MouseEvent('mouseover', common));
+          item.dispatchEvent(new MouseEvent('mouseenter', common));
+          item.dispatchEvent(new MouseEvent('mousemove', common));
+        };
+        const items = collectItems();
+        if (items.length === 0) return { found: false };
         const legacyToggle = items.find((item) => {
           const labelNorm = (item.getAttribute('aria-label') || item.textContent || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const testIdNorm = (item.getAttribute('data-testid') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -296,10 +368,10 @@ async function readModelList(cdp, timeoutMs = 8000) {
         if (legacyToggle) {
           const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
                            legacyToggle.getAttribute('data-state') === 'open';
-          const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
-          if (!expanded && attempts < 2) {
-            menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
-            dispatchClickSequence(legacyToggle);
+          const attempts = Number(document.documentElement.getAttribute('data-surf-legacy-open-attempts') || '0');
+          if (!expanded && attempts < 3) {
+            document.documentElement.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+            openLegacySubmenu(legacyToggle);
             return { found: false };
           }
         }

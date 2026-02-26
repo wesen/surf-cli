@@ -280,7 +280,7 @@ func TestHandleChatGPTToolListModels(t *testing.T) {
 				return map[string]any{"result": map[string]any{"value": true}}, nil
 			case strings.Contains(expr, "model-switcher-dropdown-button"):
 				return map[string]any{"result": map[string]any{"value": true}}, nil
-			case strings.Contains(expr, "const menu = document.querySelector"):
+			case strings.Contains(expr, "const models = []"):
 				return map[string]any{"result": map[string]any{"value": map[string]any{
 					"found":    true,
 					"models":   []any{"GPT-4o", "o1"},

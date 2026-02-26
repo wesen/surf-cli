@@ -121,7 +121,7 @@ describe("chatgpt-client", () => {
           return { result: { value: true } };
         case expression.includes("model-switcher-dropdown-button"):
           return { result: { value: true } };
-        case expression.includes("const menu = document.querySelector"):
+        case expression.includes("const models = []"):
           return {
             result: {
               value: {
