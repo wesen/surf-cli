@@ -356,6 +356,23 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	    }
 	    return true;
 	  }
+	  const normalizeDisplay = (text) => {
+	    const cleaned = (text || '').replace(/\s+/g, ' ').trim();
+	    if (!cleaned) return '';
+	    const spaced = cleaned.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+	    for (const known of ['Auto', 'Instant', 'Thinking', 'Pro']) {
+	      if (spaced === known || spaced.startsWith(known + ' ')) return known.toLowerCase();
+	    }
+	    return spaced;
+	  };
+	  const extractModelId = (blob) => {
+	    const lower = (blob || '').toLowerCase();
+	    const gptMatch = lower.match(/\b(gpt[-a-z0-9._]+)\b/);
+	    if (gptMatch) return gptMatch[1];
+	    const reasoningMatch = lower.match(/\b(o[0-9][-a-z0-9._]*)\b/);
+	    if (reasoningMatch) return reasoningMatch[1];
+	    return '';
+	  };
 	  const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 	  const targetModel = %s;
 	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
@@ -365,14 +382,16 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	  let bestMatch = null;
 	  let bestScore = 0;
 	  for (const item of items) {
-	    const label = (item.textContent || '').trim().replace(/\s+/g, ' ');
+	    const label = normalizeDisplay(item.getAttribute('aria-label') || item.textContent || '');
 	    const text = normalize(item.textContent || '');
 	    const testId = normalize(item.getAttribute('data-testid') || '');
-	    if (label && !available.includes(label)) available.push(label);
+	    const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
+	    if (canonical && canonical !== 'legacy models' && !available.includes(canonical)) available.push(canonical);
 	    let score = 0;
-	    if (text === targetModel || testId === targetModel) score = 120;
-	    else if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
-	    else if (targetModel.includes(text) || targetModel.includes(testId)) score = 50;
+	    const canonicalNorm = normalize(canonical);
+	    if (canonicalNorm === targetModel || text === targetModel || testId === targetModel) score = 140;
+	    else if (canonicalNorm.includes(targetModel) || text.includes(targetModel) || testId.includes(targetModel)) score = 100;
+	    else if (targetModel.includes(canonicalNorm) || targetModel.includes(text) || targetModel.includes(testId)) score = 50;
 	    if (score > bestScore) {
 	      bestScore = score;
 	      bestMatch = item;
@@ -464,19 +483,38 @@ func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) (
 	}
 	deadline := time.Now().Add(timeout)
 	expr := `(() => {
+	  const normalizeDisplay = (text) => {
+	    const cleaned = (text || '').replace(/\s+/g, ' ').trim();
+	    if (!cleaned) return '';
+	    const spaced = cleaned.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+	    for (const known of ['Auto', 'Instant', 'Thinking', 'Pro']) {
+	      if (spaced === known || spaced.startsWith(known + ' ')) return known.toLowerCase();
+	    }
+	    return spaced;
+	  };
+	  const extractModelId = (blob) => {
+	    const lower = (blob || '').toLowerCase();
+	    const gptMatch = lower.match(/\b(gpt[-a-z0-9._]+)\b/);
+	    if (gptMatch) return gptMatch[1];
+	    const reasoningMatch = lower.match(/\b(o[0-9][-a-z0-9._]*)\b/);
+	    if (reasoningMatch) return reasoningMatch[1];
+	    return '';
+	  };
 	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
 	  if (!menu) return { found: false };
 	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
 	  const models = [];
 	  let selected = null;
 	  for (const item of items) {
-	    const label = (item.textContent || '').trim().replace(/\s+/g, ' ');
-	    if (!label) continue;
-	    if (!models.includes(label)) models.push(label);
+	    const label = normalizeDisplay(item.getAttribute('aria-label') || item.textContent || '');
+	    const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
+	    if (!canonical) continue;
+	    if (canonical === 'legacy models') continue;
+	    if (!models.includes(canonical)) models.push(canonical);
 	    const ariaChecked = item.getAttribute('aria-checked');
 	    const dataState = item.getAttribute('data-state');
 	    if (ariaChecked === 'true' || dataState === 'checked') {
-	      selected = label;
+	      selected = canonical;
 	    }
 	  }
 	  return { found: true, models, selected };
