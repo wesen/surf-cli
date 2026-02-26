@@ -243,3 +243,26 @@ Decision:
 1. Keep router provider blocklist unchanged for non-ChatGPT providers.
 2. Implement ChatGPT via dedicated provider dispatch in host runtime before router mapping.
 3. Add an internal bridge in host runtime for provider subrequest roundtrips.
+
+### Entry 2 - Task 1 completed: host provider bridge primitives (2026-02-25 20:0x EST)
+
+Changes made:
+1. Extended `hostRuntime` with `providerPending` map + mutex for internal provider subrequest correlation.
+2. Added `requestNativeForProvider(ctx, msg, timeout)` helper to send extension messages and await correlated response.
+3. Updated native message handling to resolve provider-pending IDs before normal client pending store.
+4. Added `cloneMap` utility to avoid mutating caller maps.
+
+Files changed:
+1. `go/cmd/surf-host-go/main.go`
+2. `ttmp/.../tasks.md`
+3. `ttmp/.../reference/01-investigation-diary.md`
+
+Commands run:
+
+```bash
+go test ./cmd/surf-host-go
+```
+
+Result:
+1. Build/test pass for host command package.
+2. Task 1 marked complete.

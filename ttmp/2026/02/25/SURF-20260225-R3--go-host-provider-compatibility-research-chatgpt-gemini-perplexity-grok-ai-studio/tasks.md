@@ -30,7 +30,7 @@
 
 ## ChatGPT Integration Implementation Plan (current execution)
 
-- [ ] Task 1: Add host-side provider bridge primitives for internal extension request/response roundtrips (timeout-aware, ID-correlated).
+- [x] Task 1: Add host-side provider bridge primitives for internal extension request/response roundtrips (timeout-aware, ID-correlated).
 - [ ] Task 2: Implement `go/internal/host/providers/chatgpt.go` with ChatGPT orchestration flow (cookies, tab create/close, CDP eval/command, prompt submit, response wait).
 - [ ] Task 3: Integrate ChatGPT provider dispatch into `go/cmd/surf-host-go/main.go` before router mapping.
 - [ ] Task 4: Add focused unit tests for ChatGPT provider flow with mocked bridge behavior.

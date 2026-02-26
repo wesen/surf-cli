@@ -34,6 +34,9 @@ type hostRuntime struct {
 	ids      *pending.IDAllocator
 
 	nativeWriteMu sync.Mutex
+
+	providerPendingMu sync.Mutex
+	providerPending   map[int64]chan map[string]any
 }
 
 func main() {
@@ -65,6 +68,7 @@ func run(logger *log.Logger) error {
 		pending:  pending.NewStore(),
 		streams:  router.NewStreamRegistry(),
 		ids:      pending.NewIDAllocator(0),
+		providerPending: map[int64]chan map[string]any{},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -360,6 +364,13 @@ func (h *hostRuntime) handleNativeMessage(msg map[string]any) {
 	if !ok {
 		return
 	}
+	if ch, ok := h.popProviderPending(id); ok {
+		select {
+		case ch <- msg:
+		default:
+		}
+		return
+	}
 	req, ok := h.pending.Pop(id)
 	if !ok {
 		return
@@ -394,6 +405,49 @@ func (h *hostRuntime) writeNative(msg any) error {
 	h.nativeWriteMu.Lock()
 	defer h.nativeWriteMu.Unlock()
 	return nativeio.WriteJSON(os.Stdout, msg)
+}
+
+func (h *hostRuntime) requestNativeForProvider(ctx context.Context, msg map[string]any, timeout time.Duration) (map[string]any, error) {
+	hostID := h.ids.Next()
+	replyCh := make(chan map[string]any, 1)
+	h.putProviderPending(hostID, replyCh)
+
+	clone := cloneMap(msg)
+	clone["id"] = hostID
+	if err := h.writeNative(clone); err != nil {
+		h.popProviderPending(hostID)
+		return nil, err
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		h.popProviderPending(hostID)
+		return nil, ctx.Err()
+	case <-timer.C:
+		h.popProviderPending(hostID)
+		return nil, fmt.Errorf("timeout waiting for extension: %s", asString(msg["type"]))
+	case resp := <-replyCh:
+		return stripInternalID(resp), nil
+	}
+}
+
+func (h *hostRuntime) putProviderPending(id int64, ch chan map[string]any) {
+	h.providerPendingMu.Lock()
+	h.providerPending[id] = ch
+	h.providerPendingMu.Unlock()
+}
+
+func (h *hostRuntime) popProviderPending(id int64) (chan map[string]any, bool) {
+	h.providerPendingMu.Lock()
+	defer h.providerPendingMu.Unlock()
+	ch, ok := h.providerPending[id]
+	if ok {
+		delete(h.providerPending, id)
+	}
+	return ch, ok
 }
 
 func (h *hostRuntime) writeClientError(session *socketbridge.Session, message string) {
@@ -480,6 +534,14 @@ func stripInternalID(msg map[string]any) map[string]any {
 		if k == "id" {
 			continue
 		}
+		out[k] = v
+	}
+	return out
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
 		out[k] = v
 	}
 	return out
