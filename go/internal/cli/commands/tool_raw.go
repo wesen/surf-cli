@@ -88,5 +88,10 @@ func (c *ToolRawCommand) RunIntoGlazeProcessor(
 		return err
 	}
 
-	return gp.AddRow(ctx, ToolResponseToRow(s.Tool, resp))
+	for _, row := range ToolResponseToRows(resp) {
+		if err := gp.AddRow(ctx, row); err != nil {
+			return err
+		}
+	}
+	return nil
 }

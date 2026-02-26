@@ -8,20 +8,38 @@ import (
 	"github.com/go-go-golems/glazed/pkg/types"
 )
 
-func ToolResponseToRow(tool string, resp map[string]any) types.Row {
+func ToolResponseToRows(resp map[string]any) []types.Row {
 	if e := extractErrorText(resp); e != "" {
-		return types.NewRow(types.MRP("data", map[string]any{
-			"tool":  tool,
-			"error": e,
-		}))
+		return []types.Row{types.NewRow(types.MRP("error", e))}
 	}
 
 	parsed := parseResult(resp)
-	data := parsed.Data
-	if data == nil {
-		data = parsed.Text
+	switch data := parsed.Data.(type) {
+	case map[string]any:
+		return []types.Row{types.NewRowFromMap(data)}
+	case []any:
+		rows := make([]types.Row, 0, len(data))
+		for _, item := range data {
+			switch v := item.(type) {
+			case map[string]any:
+				rows = append(rows, types.NewRowFromMap(v))
+			default:
+				rows = append(rows, types.NewRow(types.MRP("content", v)))
+			}
+		}
+		if len(rows) > 0 {
+			return rows
+		}
 	}
-	return types.NewRow(types.MRP("data", data))
+
+	if strings.TrimSpace(parsed.Text) != "" {
+		return []types.Row{types.NewRow(types.MRP("content", parsed.Text))}
+	}
+	if len(parsed.Content) > 0 {
+		return []types.Row{types.NewRow(types.MRP("content", parsed.Content))}
+	}
+
+	return []types.Row{types.NewRow(types.MRP("content", nil))}
 }
 
 type parsedResult struct {

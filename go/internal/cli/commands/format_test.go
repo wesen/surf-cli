@@ -61,40 +61,64 @@ func TestParseStructuredTextArray(t *testing.T) {
 	}
 }
 
-func TestToolResponseToRowUsesParsedData(t *testing.T) {
+func TestToolResponseToRowsUsesParsedObjectRow(t *testing.T) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"result": map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": `{"title":"Example","url":"https://example.com"}`}},
+		},
+	}
+	rows := ToolResponseToRows(resp)
+	if len(rows) != 1 {
+		t.Fatalf("expected one row, got %d", len(rows))
+	}
+	row := rows[0]
+	fields := types.GetFields(row)
+	if len(fields) != 2 || fields[0] != "title" || fields[1] != "url" {
+		t.Fatalf("unexpected row fields: %#v", fields)
+	}
+}
+
+func TestToolResponseToRowsExpandsArrayToRows(t *testing.T) {
 	resp := map[string]any{
 		"type": "tool_response",
 		"result": map[string]any{
 			"content": []any{map[string]any{"type": "text", "text": `[{"id":1},{"id":2}]`}},
 		},
 	}
-	row := ToolResponseToRow("tab.list", resp)
-	if got := types.GetFields(row); len(got) != 1 || got[0] != "data" {
-		t.Fatalf("unexpected row fields: %#v", got)
+	rows := ToolResponseToRows(resp)
+	if len(rows) != 2 {
+		t.Fatalf("expected two rows, got %d", len(rows))
 	}
-	value, ok := row.Get("data")
+	v0, ok := rows[0].Get("id")
 	if !ok {
-		t.Fatalf("expected data field in row")
+		t.Fatalf("expected id field in first row")
 	}
-	a, ok := value.([]any)
-	if !ok || len(a) != 2 {
-		t.Fatalf("expected parsed array in data field, got %#v", value)
+	v1, ok := rows[1].Get("id")
+	if !ok {
+		t.Fatalf("expected id field in second row")
+	}
+	if v0 != float64(1) || v1 != float64(2) {
+		t.Fatalf("unexpected row values: %#v %#v", v0, v1)
 	}
 }
 
-func TestToolResponseToRowFallsBackToText(t *testing.T) {
+func TestToolResponseToRowsFallsBackToContentText(t *testing.T) {
 	resp := map[string]any{
 		"type": "tool_response",
 		"result": map[string]any{
 			"content": []any{map[string]any{"type": "text", "text": "OK"}},
 		},
 	}
-	row := ToolResponseToRow("navigate", resp)
-	value, ok := row.Get("data")
+	rows := ToolResponseToRows(resp)
+	if len(rows) != 1 {
+		t.Fatalf("expected one row, got %d", len(rows))
+	}
+	value, ok := rows[0].Get("content")
 	if !ok {
-		t.Fatalf("expected data field in row")
+		t.Fatalf("expected content field in row")
 	}
 	if s, ok := value.(string); !ok || s != "OK" {
-		t.Fatalf("expected text fallback in data field, got %#v", value)
+		t.Fatalf("expected text fallback in content field, got %#v", value)
 	}
 }
