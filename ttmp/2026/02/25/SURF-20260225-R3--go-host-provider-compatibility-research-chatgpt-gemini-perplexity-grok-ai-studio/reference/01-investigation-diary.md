@@ -266,3 +266,76 @@ go test ./cmd/surf-host-go
 Result:
 1. Build/test pass for host command package.
 2. Task 1 marked complete.
+
+### Entry 3 - Tasks 2/4 completed: `chatgpt.go` provider module + unit tests (2026-02-25 20:1x EST)
+
+Implementation:
+1. Added new package `go/internal/host/providers`.
+2. Added `chatgpt.go` with:
+   - request parsing (`query`, `model`, `with-page/withPage`, `timeout`, `file`),
+   - provider orchestration (`GET_CHATGPT_COOKIES`, optional `GET_PAGE_TEXT`, `CHATGPT_NEW_TAB`, `CHATGPT_EVALUATE`, `CHATGPT_CDP_COMMAND`, `CHATGPT_CLOSE_TAB`),
+   - page/login/prompt/send/response wait flow,
+   - structured return payload (`response`, `model`, `tookMs`).
+3. Added `chatgpt_test.go` with mocked native caller tests, including `with-page` prompt context path.
+
+Initial failure encountered:
+
+```bash
+go test ./internal/host/providers
+```
+
+Error:
+1. `non-constant format string in call to fmt.Errorf` at multiple lines.
+
+Fix:
+1. Replaced `fmt.Errorf(variable)` with `errors.New(variable)` in provider module.
+
+Validation commands:
+
+```bash
+go test ./internal/host/providers
+gofmt -w go/internal/host/providers/chatgpt.go go/internal/host/providers/chatgpt_test.go
+go test ./internal/host/providers
+```
+
+Result:
+1. Provider package tests pass.
+
+### Entry 4 - Tasks 3/5/6 completed: host integration + dispatch tests + full go test (2026-02-25 20:2x EST)
+
+Implementation:
+1. Integrated ChatGPT dispatch in `go/cmd/surf-host-go/main.go` before router mapping.
+2. Added injectable `runChatGPTTool` function in `hostRuntime` for testability.
+3. Added `providerNativeCaller` adapter using `requestNativeForProvider` bridge.
+4. Added `cmd/surf-host-go/main_test.go` to verify:
+   - `chatgpt` uses provider runner and returns tool response,
+   - provider errors are surfaced as tool errors,
+   - other providers (example: `gemini`) remain blocked by router behavior.
+
+Issue encountered during tests:
+
+```bash
+go test ./cmd/surf-host-go ./internal/host/providers ./internal/host/router
+```
+
+Behavior:
+1. Test process hung (no output).
+
+Root cause:
+1. `net.Pipe` write path blocked because `handleSessionLine` was called synchronously and response read happened only after call return.
+
+Fix:
+1. Updated tests to call `handleSessionLine` in goroutines and read from the paired connection concurrently.
+
+Validation commands:
+
+```bash
+gofmt -w go/cmd/surf-host-go/main.go go/cmd/surf-host-go/main_test.go go/internal/host/providers/chatgpt.go go/internal/host/providers/chatgpt_test.go
+go test ./cmd/surf-host-go ./internal/host/providers ./internal/host/router
+go test ./...
+```
+
+Result:
+1. Targeted suites pass.
+2. Full Go module test suite passes.
+3. Tasks 2-6 marked complete.

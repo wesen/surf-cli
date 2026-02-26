@@ -1,0 +1,627 @@
+package providers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+const (
+	defaultChatGPTTimeout = 45 * time.Minute
+	extCallTimeout        = 30 * time.Second
+)
+
+const (
+	chatGPTPromptSelectors = `#prompt-textarea, [data-testid="composer-textarea"], textarea[name="prompt-textarea"], .ProseMirror, [contenteditable="true"][data-virtualkeyboard="true"]`
+	chatGPTSendSelectors   = `button[data-testid="send-button"], button[data-testid*="composer-send"], form button[type="submit"]`
+	chatGPTURL             = "https://chatgpt.com/"
+)
+
+// NativeCaller sends one request to the extension native-messaging side and waits for a response.
+type NativeCaller interface {
+	Request(ctx context.Context, msg map[string]any, timeout time.Duration) (map[string]any, error)
+}
+
+type ChatGPTRequest struct {
+	Query    string
+	Model    string
+	WithPage bool
+	File     string
+	Timeout  time.Duration
+	TabID    *int64
+}
+
+func HandleChatGPTTool(ctx context.Context, caller NativeCaller, rawArgs map[string]any, tabID *int64, logf func(string, ...any)) (map[string]any, error) {
+	req, err := parseChatGPTRequest(rawArgs, tabID)
+	if err != nil {
+		return nil, err
+	}
+	return runChatGPTQuery(ctx, caller, req, logf)
+}
+
+func parseChatGPTRequest(rawArgs map[string]any, tabID *int64) (ChatGPTRequest, error) {
+	args := rawArgs
+	if args == nil {
+		args = map[string]any{}
+	}
+
+	query := strings.TrimSpace(asString(args["query"]))
+	if query == "" {
+		return ChatGPTRequest{}, fmt.Errorf("query required")
+	}
+
+	timeout := defaultChatGPTTimeout
+	if v, ok := args["timeout"]; ok && v != nil {
+		seconds, ok := toInt64(v)
+		if !ok || seconds < 1 {
+			return ChatGPTRequest{}, fmt.Errorf("timeout must be a positive integer")
+		}
+		timeout = time.Duration(seconds) * time.Second
+	}
+
+	return ChatGPTRequest{
+		Query:    query,
+		Model:    strings.TrimSpace(asString(args["model"])),
+		WithPage: asBool(args["with-page"]) || asBool(args["withPage"]),
+		File:     strings.TrimSpace(asString(args["file"])),
+		Timeout:  timeout,
+		TabID:    tabID,
+	}, nil
+}
+
+func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTRequest, logf func(string, ...any)) (map[string]any, error) {
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
+
+	started := time.Now()
+	logf("[chatgpt] starting query")
+
+	cookiesResp, err := caller.Request(ctx, map[string]any{"type": "GET_CHATGPT_COOKIES"}, extCallTimeout)
+	if err != nil {
+		return nil, err
+	}
+	if e := responseError(cookiesResp); e != "" {
+		return nil, errors.New(e)
+	}
+	if !hasChatGPTSessionCookie(cookiesResp["cookies"]) {
+		return nil, fmt.Errorf("ChatGPT login required")
+	}
+
+	fullPrompt := req.Query
+	if req.WithPage {
+		pageMsg := map[string]any{"type": "GET_PAGE_TEXT"}
+		if req.TabID != nil {
+			pageMsg["tabId"] = *req.TabID
+		}
+		pageResp, pageErr := caller.Request(ctx, pageMsg, 45*time.Second)
+		if pageErr == nil && responseError(pageResp) == "" {
+			url := asString(pageResp["url"])
+			text := asString(pageResp["text"])
+			if text == "" {
+				text = asString(pageResp["pageContent"])
+			}
+			if url != "" || text != "" {
+				fullPrompt = fmt.Sprintf("Page: %s\n\n%s\n\n---\n\n%s", url, text, req.Query)
+			}
+		}
+	}
+
+	tabResp, err := caller.Request(ctx, map[string]any{"type": "CHATGPT_NEW_TAB"}, 45*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if e := responseError(tabResp); e != "" {
+		return nil, errors.New(e)
+	}
+	tabID, ok := toInt64(tabResp["tabId"])
+	if !ok || tabID <= 0 {
+		return nil, fmt.Errorf("Failed to create ChatGPT tab")
+	}
+	logf("[chatgpt] opened tab %d", tabID)
+
+	bridge := &chatGPTBridge{caller: caller, tabID: tabID}
+	defer func() {
+		_, _ = caller.Request(context.Background(), map[string]any{
+			"type":  "CHATGPT_CLOSE_TAB",
+			"tabId": tabID,
+		}, extCallTimeout)
+	}()
+
+	if err := bridge.waitForPageLoad(ctx, 45*time.Second); err != nil {
+		return nil, err
+	}
+	blocked, err := bridge.isCloudflareBlocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, fmt.Errorf("Cloudflare challenge detected - complete in browser")
+	}
+
+	loginStatus, err := bridge.checkLoginStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if loginStatus.Status != 200 || loginStatus.HasLoginCTA {
+		return nil, fmt.Errorf("ChatGPT login required")
+	}
+
+	promptReady, err := bridge.waitForPromptReady(ctx, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if !promptReady {
+		return nil, fmt.Errorf("Prompt textarea not ready")
+	}
+
+	if req.Model != "" {
+		if err := bridge.selectModel(ctx, req.Model, 8*time.Second); err != nil {
+			return nil, err
+		}
+	}
+
+	if req.File != "" {
+		return nil, fmt.Errorf("File upload not yet implemented")
+	}
+
+	if err := bridge.typePrompt(ctx, fullPrompt); err != nil {
+		return nil, err
+	}
+	if err := bridge.clickSend(ctx); err != nil {
+		return nil, err
+	}
+	responseText, err := bridge.waitForResponse(ctx, req.Timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"response": responseText,
+		"model":    firstNonEmpty(req.Model, "current"),
+		"tookMs":   time.Since(started).Milliseconds(),
+	}, nil
+}
+
+type chatGPTBridge struct {
+	caller NativeCaller
+	tabID  int64
+}
+
+type chatGPTLoginStatus struct {
+	Status      int64
+	HasLoginCTA bool
+}
+
+func (b *chatGPTBridge) evaluate(ctx context.Context, expression string, timeout time.Duration) (any, error) {
+	resp, err := b.caller.Request(ctx, map[string]any{
+		"type":       "CHATGPT_EVALUATE",
+		"tabId":      b.tabID,
+		"expression": expression,
+	}, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if e := responseError(resp); e != "" {
+		return nil, errors.New(e)
+	}
+	if exceptionDetails, ok := resp["exceptionDetails"]; ok && exceptionDetails != nil {
+		return nil, errors.New(extractExceptionText(exceptionDetails))
+	}
+	result, _ := resp["result"].(map[string]any)
+	if result == nil {
+		if v, ok := resp["value"]; ok {
+			return v, nil
+		}
+		return nil, nil
+	}
+	return result["value"], nil
+}
+
+func (b *chatGPTBridge) cdpCommand(ctx context.Context, method string, params map[string]any, timeout time.Duration) error {
+	resp, err := b.caller.Request(ctx, map[string]any{
+		"type":   "CHATGPT_CDP_COMMAND",
+		"tabId":  b.tabID,
+		"method": method,
+		"params": params,
+	}, timeout)
+	if err != nil {
+		return err
+	}
+	if e := responseError(resp); e != "" {
+		return errors.New(e)
+	}
+	return nil
+}
+
+func (b *chatGPTBridge) waitForPageLoad(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, "document.readyState", extCallTimeout)
+		if err != nil {
+			return err
+		}
+		if ready, _ := v.(string); ready == "complete" || ready == "interactive" {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("Page did not load in time")
+}
+
+func (b *chatGPTBridge) isCloudflareBlocked(ctx context.Context) (bool, error) {
+	titleValue, err := b.evaluate(ctx, "document.title.toLowerCase()", extCallTimeout)
+	if err != nil {
+		return false, err
+	}
+	if title, _ := titleValue.(string); strings.Contains(title, "just a moment") {
+		return true, nil
+	}
+	v, err := b.evaluate(ctx, `Boolean(document.querySelector('script[src*="/challenge-platform/"]'))`, extCallTimeout)
+	if err != nil {
+		return false, err
+	}
+	return asBool(v), nil
+}
+
+func (b *chatGPTBridge) checkLoginStatus(ctx context.Context) (chatGPTLoginStatus, error) {
+	v, err := b.evaluate(ctx, `(async () => {
+	  try {
+	    const response = await fetch('/backend-api/me', { cache: 'no-store', credentials: 'include' });
+	    const hasLoginCta = Array.from(document.querySelectorAll('a[href*="/auth/login"], button'))
+	      .some(el => {
+	        const text = (el.textContent || '').toLowerCase().trim();
+	        return text.startsWith('log in') || text.startsWith('sign in');
+	      });
+	    return { status: response.status, hasLoginCta };
+	  } catch (e) {
+	    return { status: 0, hasLoginCta: false };
+	  }
+	})()`, extCallTimeout)
+	if err != nil {
+		return chatGPTLoginStatus{}, err
+	}
+	m, _ := v.(map[string]any)
+	status, _ := toInt64(m["status"])
+	return chatGPTLoginStatus{Status: status, HasLoginCTA: asBool(m["hasLoginCta"])}, nil
+}
+
+func (b *chatGPTBridge) waitForPromptReady(ctx context.Context, timeout time.Duration) (bool, error) {
+	deadline := time.Now().Add(timeout)
+	sel := toJSONString(strings.Split(chatGPTPromptSelectors, ", "))
+	expr := fmt.Sprintf(`(() => {
+	  const selectors = %s;
+	  for (const selector of selectors) {
+	    const node = document.querySelector(selector);
+	    if (node && !node.hasAttribute('disabled')) return true;
+	  }
+	  return false;
+	})()`, sel)
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, expr, extCallTimeout)
+		if err != nil {
+			return false, err
+		}
+		if asBool(v) {
+			return true, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return false, nil
+}
+
+func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout time.Duration) error {
+	normalized := normalizeModel(model)
+	target := toJSONString(normalized)
+
+	buttonExists, err := b.evaluate(ctx, `(() => Boolean(document.querySelector('[data-testid="model-switcher-dropdown-button"]')))()`, extCallTimeout)
+	if err != nil {
+		return err
+	}
+	if !asBool(buttonExists) {
+		return fmt.Errorf("Model selector button not found")
+	}
+
+	if _, err := b.evaluate(ctx, `(() => {
+	  const btn = document.querySelector('[data-testid="model-switcher-dropdown-button"]');
+	  if (btn) btn.click();
+	  return true;
+	})()`, extCallTimeout); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	deadline := time.Now().Add(timeout)
+	expr := fmt.Sprintf(`(() => {
+	  const normalize = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+	  const targetModel = %s;
+	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
+	  if (!menu) return { found: false, waiting: true };
+	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  let bestMatch = null;
+	  let bestScore = 0;
+	  for (const item of items) {
+	    const text = normalize(item.textContent || '');
+	    const testId = normalize(item.getAttribute('data-testid') || '');
+	    let score = 0;
+	    if (text.includes(targetModel) || testId.includes(targetModel)) score = 100;
+	    else if (targetModel.includes(text) || targetModel.includes(testId)) score = 50;
+	    if (score > bestScore) {
+	      bestScore = score;
+	      bestMatch = item;
+	    }
+	  }
+	  if (bestMatch) {
+	    bestMatch.click();
+	    return { found: true, success: true };
+	  }
+	  return { found: true, success: false };
+	})()`, target)
+
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, expr, extCallTimeout)
+		if err != nil {
+			return err
+		}
+		m, _ := v.(map[string]any)
+		if asBool(m["found"]) {
+			if asBool(m["success"]) {
+				return nil
+			}
+			return fmt.Errorf("Model not found: %s", model)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return fmt.Errorf("Model not found: %s (timeout)", model)
+}
+
+func (b *chatGPTBridge) typePrompt(ctx context.Context, prompt string) error {
+	sel := toJSONString(strings.Split(chatGPTPromptSelectors, ", "))
+	focusExpr := fmt.Sprintf(`(() => {
+	  const selectors = %s;
+	  for (const selector of selectors) {
+	    const node = document.querySelector(selector);
+	    if (!node) continue;
+	    if (typeof node.focus === 'function') node.focus();
+	    node.click?.();
+	    return true;
+	  }
+	  return false;
+	})()`, sel)
+	focused, err := b.evaluate(ctx, focusExpr, extCallTimeout)
+	if err != nil {
+		return err
+	}
+	if !asBool(focused) {
+		return fmt.Errorf("Failed to focus prompt textarea")
+	}
+	if err := b.cdpCommand(ctx, "Input.insertText", map[string]any{"text": prompt}, extCallTimeout); err != nil {
+		return err
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	verifyExpr := fmt.Sprintf(`(() => {
+	  const selectors = %s;
+	  for (const selector of selectors) {
+	    const node = document.querySelector(selector);
+	    if (!node) continue;
+	    const text = node.innerText || node.value || node.textContent || '';
+	    if (text.trim().length > 0) return true;
+	  }
+	  return false;
+	})()`, sel)
+	verified, err := b.evaluate(ctx, verifyExpr, extCallTimeout)
+	if err != nil {
+		return err
+	}
+	if !asBool(verified) {
+		return fmt.Errorf("Failed to type prompt")
+	}
+	return nil
+}
+
+func (b *chatGPTBridge) clickSend(ctx context.Context) error {
+	selectors := toJSONString(strings.Split(chatGPTSendSelectors, ", "))
+	expr := fmt.Sprintf(`(() => {
+	  const selectors = %s;
+	  let button = null;
+	  for (const selector of selectors) {
+	    button = document.querySelector(selector);
+	    if (button) break;
+	  }
+	  if (!button) return 'missing';
+	  const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true' || button.getAttribute('data-disabled') === 'true';
+	  if (disabled) return 'disabled';
+	  button.click();
+	  return 'clicked';
+	})()`, selectors)
+
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, expr, extCallTimeout)
+		if err != nil {
+			return err
+		}
+		status, _ := v.(string)
+		if status == "clicked" {
+			return nil
+		}
+		if status == "missing" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err := b.cdpCommand(ctx, "Input.dispatchKeyEvent", map[string]any{
+		"type":                  "keyDown",
+		"key":                   "Enter",
+		"code":                  "Enter",
+		"windowsVirtualKeyCode": 13,
+		"nativeVirtualKeyCode":  13,
+		"text":                  "\r",
+	}, extCallTimeout); err != nil {
+		return err
+	}
+	return b.cdpCommand(ctx, "Input.dispatchKeyEvent", map[string]any{
+		"type":                  "keyUp",
+		"key":                   "Enter",
+		"code":                  "Enter",
+		"windowsVirtualKeyCode": 13,
+		"nativeVirtualKeyCode":  13,
+	}, extCallTimeout)
+}
+
+func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	expr := `(() => {
+	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
+	  let lastAssistantTurn = null;
+	  for (let i = turns.length - 1; i >= 0; i--) {
+	    const node = turns[i];
+	    const role = (node.getAttribute('data-message-author-role') || '').toLowerCase();
+	    const turn = (node.getAttribute('data-turn') || '').toLowerCase();
+	    if (role === 'assistant' || turn === 'assistant' || node.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]')) {
+	      lastAssistantTurn = node;
+	      break;
+	    }
+	  }
+	  if (!lastAssistantTurn) {
+	    return { text: '', stopVisible: Boolean(document.querySelector('[data-testid="stop-button"]')), finished: false };
+	  }
+	  const messageRoot = lastAssistantTurn.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]') || lastAssistantTurn;
+	  const contentRoot = messageRoot.querySelector('.markdown') || messageRoot.querySelector('[data-message-content]') || messageRoot.querySelector('.prose') || messageRoot;
+	  const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
+	  const stopVisible = Boolean(document.querySelector('[data-testid="stop-button"]'));
+	  const finished = Boolean(lastAssistantTurn.querySelector('button[data-testid="copy-turn-action-button"], button[data-testid="good-response-turn-action-button"]'));
+	  return { text, stopVisible, finished };
+	})()`
+
+	for time.Now().Before(deadline) {
+		v, err := b.evaluate(ctx, expr, extCallTimeout)
+		if err != nil {
+			return "", err
+		}
+		m, _ := v.(map[string]any)
+		text := strings.TrimSpace(asString(m["text"]))
+		if text != "" && !asBool(m["stopVisible"]) && asBool(m["finished"]) {
+			return text, nil
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	return "", fmt.Errorf("Response timeout")
+}
+
+func hasChatGPTSessionCookie(raw any) bool {
+	items, ok := raw.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		m, _ := item.(map[string]any)
+		if m == nil {
+			continue
+		}
+		if asString(m["name"]) == "__Secure-next-auth.session-token" && strings.TrimSpace(asString(m["value"])) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func responseError(resp map[string]any) string {
+	if resp == nil {
+		return ""
+	}
+	if s := strings.TrimSpace(asString(resp["error"])); s != "" {
+		return s
+	}
+	return ""
+}
+
+func extractExceptionText(raw any) string {
+	m, _ := raw.(map[string]any)
+	if m == nil {
+		return "Evaluation failed"
+	}
+	if ex, ok := m["exception"].(map[string]any); ok {
+		if desc := strings.TrimSpace(asString(ex["description"])); desc != "" {
+			return desc
+		}
+	}
+	if text := strings.TrimSpace(asString(m["text"])); text != "" {
+		return text
+	}
+	return "Evaluation failed"
+}
+
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func asBool(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		n := strings.TrimSpace(strings.ToLower(x))
+		return n == "1" || n == "true" || n == "yes" || n == "y"
+	default:
+		return false
+	}
+}
+
+func toInt64(v any) (int64, bool) {
+	switch x := v.(type) {
+	case int:
+		return int64(x), true
+	case int32:
+		return int64(x), true
+	case int64:
+		return x, true
+	case float64:
+		return int64(x), true
+	case json.Number:
+		n, err := x.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	case string:
+		if strings.TrimSpace(x) == "" {
+			return 0, false
+		}
+		var n int64
+		if _, err := fmt.Sscan(strings.TrimSpace(x), &n); err != nil {
+			return 0, false
+		}
+		return n, true
+	default:
+		return 0, false
+	}
+}
+
+func toJSONString(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "null"
+	}
+	return string(b)
+}
+
+func normalizeModel(model string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(model), " ", ""))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/nicobailon/surf-cli/gohost/internal/host/config"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/nativeio"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/pending"
+	"github.com/nicobailon/surf-cli/gohost/internal/host/providers"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/router"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/socketbridge"
 )
@@ -37,6 +39,8 @@ type hostRuntime struct {
 
 	providerPendingMu sync.Mutex
 	providerPending   map[int64]chan map[string]any
+
+	runChatGPTTool func(ctx context.Context, args map[string]any, tabID *int64, logf func(string, ...any)) (map[string]any, error)
 }
 
 func main() {
@@ -62,14 +66,15 @@ func run(logger *log.Logger) error {
 	defer listener.Cleanup()
 
 	h := &hostRuntime{
-		log:      logger,
-		decoder:  nativeio.NewDecoder(os.Stdin, 0),
-		sessions: socketbridge.NewSessionManager(),
-		pending:  pending.NewStore(),
-		streams:  router.NewStreamRegistry(),
-		ids:      pending.NewIDAllocator(0),
+		log:             logger,
+		decoder:         nativeio.NewDecoder(os.Stdin, 0),
+		sessions:        socketbridge.NewSessionManager(),
+		pending:         pending.NewStore(),
+		streams:         router.NewStreamRegistry(),
+		ids:             pending.NewIDAllocator(0),
 		providerPending: map[int64]chan map[string]any{},
 	}
+	h.runChatGPTTool = h.defaultChatGPTToolRunner
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -189,6 +194,15 @@ func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []by
 		req, err := router.ParseToolRequest(msg)
 		if err != nil {
 			h.sendToolError(session, msg["id"], err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Params.Tool) == "chatgpt" {
+			result, err := h.runChatGPTTool(context.Background(), req.Params.Args, req.TabID, h.log.Printf)
+			if err != nil {
+				h.sendToolError(session, requestOriginalID(req), err.Error())
+				return
+			}
+			h.sendToolResult(session, requestOriginalID(req), result)
 			return
 		}
 
@@ -432,6 +446,22 @@ func (h *hostRuntime) requestNativeForProvider(ctx context.Context, msg map[stri
 	case resp := <-replyCh:
 		return stripInternalID(resp), nil
 	}
+}
+
+func (h *hostRuntime) defaultChatGPTToolRunner(ctx context.Context, args map[string]any, tabID *int64, logf func(string, ...any)) (map[string]any, error) {
+	caller := providerNativeCaller{runtime: h}
+	return providers.HandleChatGPTTool(ctx, caller, args, tabID, logf)
+}
+
+type providerNativeCaller struct {
+	runtime *hostRuntime
+}
+
+func (c providerNativeCaller) Request(ctx context.Context, msg map[string]any, timeout time.Duration) (map[string]any, error) {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	return c.runtime.requestNativeForProvider(ctx, msg, timeout)
 }
 
 func (h *hostRuntime) putProviderPending(id int64, ch chan map[string]any) {
