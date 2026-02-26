@@ -378,6 +378,21 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
 	  if (!menu) return { found: false, waiting: true };
 	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const legacyToggle = items.find((item) => {
+	    const labelNorm = normalize(item.getAttribute('aria-label') || item.textContent || '');
+	    const testIdNorm = normalize(item.getAttribute('data-testid') || '');
+	    return labelNorm.startsWith('legacymodels') || testIdNorm.includes('legacymodel');
+	  });
+	  if (legacyToggle) {
+	    const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
+	                     legacyToggle.getAttribute('data-state') === 'open';
+	    const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
+	    if (!expanded && attempts < 2) {
+	      menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+	      dispatchClickSequence(legacyToggle);
+	      return { found: false, waiting: true };
+	    }
+	  }
 	  const available = [];
 	  let bestMatch = null;
 	  let bestScore = 0;
@@ -386,7 +401,7 @@ func (b *chatGPTBridge) selectModel(ctx context.Context, model string, timeout t
 	    const text = normalize(item.textContent || '');
 	    const testId = normalize(item.getAttribute('data-testid') || '');
 	    const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
-	    if (canonical && canonical !== 'legacy models' && !available.includes(canonical)) available.push(canonical);
+	    if (canonical && canonical.toLowerCase() !== 'legacy models' && !available.includes(canonical)) available.push(canonical);
 	    let score = 0;
 	    const canonicalNorm = normalize(canonical);
 	    if (canonicalNorm === targetModel || text === targetModel || testId === targetModel) score = 140;
@@ -483,6 +498,21 @@ func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) (
 	}
 	deadline := time.Now().Add(timeout)
 	expr := `(() => {
+	  function dispatchClickSequence(target){
+	    if(!target || !(target instanceof EventTarget)) return false;
+	    const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+	    for (const type of types) {
+	      const common = { bubbles: true, cancelable: true, view: window };
+	      let event;
+	      if (type.startsWith('pointer') && 'PointerEvent' in window) {
+	        event = new PointerEvent(type, { ...common, pointerId: 1, pointerType: 'mouse' });
+	      } else {
+	        event = new MouseEvent(type, common);
+	      }
+	      target.dispatchEvent(event);
+	    }
+	    return true;
+	  }
 	  const normalizeDisplay = (text) => {
 	    const cleaned = (text || '').replace(/\s+/g, ' ').trim();
 	    if (!cleaned) return '';
@@ -503,13 +533,28 @@ func (b *chatGPTBridge) listModels(ctx context.Context, timeout time.Duration) (
 	  const menu = document.querySelector('[role="menu"], [data-radix-collection-root]');
 	  if (!menu) return { found: false };
 	  const items = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="menuitemradio"], [data-testid*="model-switcher-"]'));
+	  const legacyToggle = items.find((item) => {
+	    const labelNorm = (item.getAttribute('aria-label') || item.textContent || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+	    const testIdNorm = (item.getAttribute('data-testid') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+	    return labelNorm.startsWith('legacymodels') || testIdNorm.includes('legacymodel');
+	  });
+	  if (legacyToggle) {
+	    const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
+	                     legacyToggle.getAttribute('data-state') === 'open';
+	    const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
+	    if (!expanded && attempts < 2) {
+	      menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+	      dispatchClickSequence(legacyToggle);
+	      return { found: false };
+	    }
+	  }
 	  const models = [];
 	  let selected = null;
 	  for (const item of items) {
 	    const label = normalizeDisplay(item.getAttribute('aria-label') || item.textContent || '');
 	    const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
 	    if (!canonical) continue;
-	    if (canonical === 'legacy models') continue;
+	    if (canonical.toLowerCase() === 'legacy models') continue;
 	    if (!models.includes(canonical)) models.push(canonical);
 	    const ariaChecked = item.getAttribute('aria-checked');
 	    const dataState = item.getAttribute('data-state');
@@ -873,7 +918,16 @@ func toJSONString(v any) string {
 }
 
 func normalizeModel(model string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(model), " ", ""))
+	clean := strings.ToLower(strings.TrimSpace(model))
+	if clean == "" {
+		return ""
+	}
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return -1
+	}, clean)
 }
 
 func firstNonEmpty(values ...string) string {

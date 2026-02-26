@@ -168,6 +168,21 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
           return { found: false, waiting: true };
         }
         const items = Array.from(menu.querySelectorAll(itemSelector));
+        const legacyToggle = items.find((item) => {
+          const labelNorm = normalize(item.getAttribute('aria-label') || item.textContent || '');
+          const testIdNorm = normalize(item.getAttribute('data-testid') || '');
+          return labelNorm.startsWith('legacymodels') || testIdNorm.includes('legacymodel');
+        });
+        if (legacyToggle) {
+          const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
+                           legacyToggle.getAttribute('data-state') === 'open';
+          const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
+          if (!expanded && attempts < 2) {
+            menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+            dispatchClickSequence(legacyToggle);
+            return { found: false, waiting: true };
+          }
+        }
         const available = [];
         let bestMatch = null;
         let bestScore = 0;
@@ -176,7 +191,7 @@ async function selectModel(cdp, desiredModel, timeoutMs = 8000) {
           const text = normalize(item.textContent || '');
           const testId = normalize(item.getAttribute('data-testid') || '');
           const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
-          if (canonical && canonical !== 'legacy models' && !available.includes(canonical)) available.push(canonical);
+          if (canonical && canonical.toLowerCase() !== 'legacy models' && !available.includes(canonical)) available.push(canonical);
           let score = 0;
           const canonicalNorm = normalize(canonical);
           if (canonicalNorm === targetModel || text === targetModel || testId === targetModel) score = 140;
@@ -252,6 +267,7 @@ async function readModelList(cdp, timeoutMs = 8000) {
     const snapshot = await evaluate(
       cdp,
       `(() => {
+        ${buildClickDispatcher()}
         const normalizeDisplay = (text) => {
           const cleaned = (text || '').replace(/\\s+/g, ' ').trim();
           if (!cleaned) return '';
@@ -272,13 +288,28 @@ async function readModelList(cdp, timeoutMs = 8000) {
         const menu = document.querySelector('${SELECTORS.menuContainer}');
         if (!menu) return { found: false };
         const items = Array.from(menu.querySelectorAll('${SELECTORS.menuItem}'));
+        const legacyToggle = items.find((item) => {
+          const labelNorm = (item.getAttribute('aria-label') || item.textContent || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const testIdNorm = (item.getAttribute('data-testid') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return labelNorm.startsWith('legacymodels') || testIdNorm.includes('legacymodel');
+        });
+        if (legacyToggle) {
+          const expanded = legacyToggle.getAttribute('aria-expanded') === 'true' ||
+                           legacyToggle.getAttribute('data-state') === 'open';
+          const attempts = Number(menu.getAttribute('data-surf-legacy-open-attempts') || '0');
+          if (!expanded && attempts < 2) {
+            menu.setAttribute('data-surf-legacy-open-attempts', String(attempts + 1));
+            dispatchClickSequence(legacyToggle);
+            return { found: false };
+          }
+        }
         const models = [];
         let selected = null;
         for (const item of items) {
           const label = normalizeDisplay(item.getAttribute('aria-label') || item.textContent || '');
           const canonical = extractModelId([item.getAttribute('data-testid'), item.getAttribute('aria-label'), item.textContent].filter(Boolean).join(' ')) || label;
           if (!canonical) continue;
-          if (canonical === 'legacy models') continue;
+          if (canonical.toLowerCase() === 'legacy models') continue;
           if (!models.includes(canonical)) models.push(canonical);
           const ariaChecked = item.getAttribute('aria-checked');
           const dataState = item.getAttribute('data-state');
