@@ -7,6 +7,48 @@ let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingNativeRequests = new Map<number, { resolve: (value: any) => void; reject: (err: Error) => void }>();
 let nativeRequestId = 0;
 
+function summarizeNativePayload(value: any): any {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return { type: "array", length: value.length };
+  }
+  if (typeof value === "string") {
+    return value.length > 160 ? `${value.slice(0, 160)}...` : value;
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+
+  const summary: Record<string, any> = { keys: Object.keys(value) };
+  if ("type" in value) summary.type = value.type;
+  if ("id" in value) summary.id = value.id;
+  if ("tabId" in value) summary.tabId = value.tabId;
+  if ("success" in value) summary.success = value.success;
+  if ("error" in value) summary.error = value.error;
+  if ("result" in value && value.result && typeof value.result === "object") {
+    summary.resultKeys = Object.keys(value.result);
+  }
+  if ("cookies" in value && Array.isArray(value.cookies)) {
+    summary.cookies = value.cookies.length;
+  }
+  if ("text" in value && typeof value.text === "string") {
+    summary.textPreview = value.text.slice(0, 120);
+  }
+  if ("value" in value) {
+    const inner = value.value;
+    if (typeof inner === "string") {
+      summary.valuePreview = inner.slice(0, 120);
+    } else if (Array.isArray(inner)) {
+      summary.valueLength = inner.length;
+    } else if (inner && typeof inner === "object") {
+      summary.valueKeys = Object.keys(inner);
+    } else {
+      summary.value = inner;
+    }
+  }
+  return summary;
+}
+
 export function initNativeMessaging(
   handler: (msg: any) => Promise<any>
 ): void {
@@ -79,22 +121,49 @@ function connect(): void {
 
       if (!messageHandler) return;
 
+      const startedAt = Date.now();
+      debugLog("Handling native host request:", {
+        id: msg.id,
+        type: msg.type,
+        tabId: msg.tabId,
+      });
+
       try {
         const result = await messageHandler(msg);
+        debugLog("Native host handler resolved:", {
+          id: msg.id,
+          type: msg.type,
+          tookMs: Date.now() - startedAt,
+          result: summarizeNativePayload(result),
+        });
         if (!nativePort) {
           debugLog("Cannot send response - native host disconnected:", msg.id);
           return;
         }
-        nativePort.postMessage({ id: msg.id, ...result });
+        const response = { id: msg.id, ...result };
+        nativePort.postMessage(response);
+        debugLog("Sent response to native host:", {
+          id: msg.id,
+          type: msg.type,
+          response: summarizeNativePayload(response),
+        });
       } catch (err) {
+        debugLog("Native host handler failed:", {
+          id: msg.id,
+          type: msg.type,
+          tookMs: Date.now() - startedAt,
+          error: err instanceof Error ? err.message : String(err),
+        });
         if (!nativePort) {
           debugLog("Cannot send error - native host disconnected:", msg.id);
           return;
         }
-        nativePort.postMessage({
+        const errorResponse = {
           id: msg.id,
           error: err instanceof Error ? err.message : "Unknown error",
-        });
+        };
+        nativePort.postMessage(errorResponse);
+        debugLog("Sent error to native host:", errorResponse);
       }
     });
 
