@@ -25,26 +25,28 @@ This complements `README.md` and focuses on install/verification/troubleshooting
 ### Install
 
 ```bash
-npm install -g surf-cli
-surf install <extension-id> --browser chromium
+cd go
+go run ./cmd/surf-go install <extension-id> --browser chromium
 ```
 
 The installer will:
 
+- build `surf-host-go` from the current checkout
 - install native-host manifest(s)
-- create host wrapper script
-- build `surf-host-go` when Go + source are available
-- enable profile switching in wrapper (`SURF_HOST_PROFILE`)
+- create host wrapper script(s)
+- install the Chromium snap target when `~/snap/chromium/common` exists
 
 For Chrome, replace `--browser chromium` with `--browser chrome`.
 
-## 2) Enable Go Runtime
-
-Set runtime profile before launching browser:
+Alternative Node-managed install:
 
 ```bash
-export SURF_HOST_PROFILE=core-go
+node scripts/install-native-host.cjs <extension-id> --browser chromium --profile core-go
 ```
+
+That path installs the shared Node wrapper and configures it to prefer the Go host by default.
+
+## 2) Enable Go Runtime
 
 For Snap Chromium, also set CLI socket path:
 
@@ -55,10 +57,6 @@ export SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock
 Then launch browser and reload extension.
 
 ## 3) Verify Installation
-
-Run installer output and confirm you see a hint like:
-
-- `core-go profile available. Set SURF_HOST_PROFILE=core-go ...`
 
 Check expected files on Linux:
 
@@ -149,9 +147,8 @@ Fix:
 - run install from this repository checkout, or reinstall package version that includes `go/`
 
 ```bash
-cd /path/to/surf-cli-repo
-npm install -g .
-node scripts/install-native-host.cjs <extension-id> --browser chromium
+cd /path/to/surf-cli-repo/go
+go run ./cmd/surf-go install <extension-id> --browser chromium
 ```
 
 ### `Native host disconnected: Native host has exited.`
@@ -183,11 +180,10 @@ The wrapper decides runtime at launch time:
 - `SURF_HOST_PROFILE=core-go` and `surf-host-go` exists -> run Go host
 - otherwise -> fallback to Node host (`native/host.cjs`)
 
-This means one install supports both runtimes without reinstalling.
+This applies to the Node-managed wrapper install. `surf-go install` launches the Go host directly and does not rely on `SURF_HOST_PROFILE`.
 
 ## 8) Environment Variables Relevant to Go Runtime
 
-- `SURF_HOST_PROFILE`: `node-full` (default) or `core-go`
 - `SURF_SOCKET_PATH`: override socket path for CLI/host communication
 - `SURF_HOST_LOG`: Go host log file path (default `/tmp/surf-host-go.log`)
 - `SURF_GO_PATH`: Go binary used by installer when building `surf-host-go`
@@ -205,9 +201,9 @@ This means one install supports both runtimes without reinstalling.
 If runtime behavior is unclear, do a clean reinstall:
 
 ```bash
-surf uninstall --all
-surf install <extension-id> --browser chromium
-export SURF_HOST_PROFILE=core-go
+node scripts/uninstall-native-host.cjs --browser chromium --all
+cd go
+go run ./cmd/surf-go install <extension-id> --browser chromium
 export SURF_SOCKET_PATH=~/snap/chromium/common/surf-cli/surf.sock   # snap only
 ```
 

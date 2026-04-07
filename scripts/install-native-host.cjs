@@ -233,6 +233,7 @@ function prepareSnapRuntime(wrapperDir, nodePath, hostPath) {
 function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
   const platform = process.platform;
   fs.mkdirSync(wrapperDir, { recursive: true });
+  const defaultProfile = options.defaultProfile || "node-full";
 
   if (platform === "win32") {
     const batPath = path.join(wrapperDir, "host-wrapper.bat");
@@ -240,7 +241,7 @@ function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
       ? `set SURF_SOCKET_PATH=${options.socketPath}\r\n`
       : "";
     const goBlock = options.goHostPath
-      ? `set SURF_HOST_PROFILE=%SURF_HOST_PROFILE%\r\nif "%SURF_HOST_PROFILE%"=="" set SURF_HOST_PROFILE=node-full\r\nif "%SURF_HOST_PROFILE%"=="core-go" if exist "${options.goHostPath}" (\r\n  "${options.goHostPath}"\r\n  exit /b %errorlevel%\r\n)\r\n`
+      ? `set SURF_HOST_PROFILE=%SURF_HOST_PROFILE%\r\nif "%SURF_HOST_PROFILE%"=="" set SURF_HOST_PROFILE=${defaultProfile}\r\nif "%SURF_HOST_PROFILE%"=="core-go" if exist "${options.goHostPath}" (\r\n  "${options.goHostPath}"\r\n  exit /b %errorlevel%\r\n)\r\n`
       : "";
     const content = `@echo off\r\n${envLine}${goBlock}"${nodePath}" "${hostPath}"\r\n`;
     fs.writeFileSync(batPath, content);
@@ -253,7 +254,7 @@ function createWrapper(wrapperDir, nodePath, hostPath, options = {}) {
     ? `export SURF_SOCKET_PATH=\"${options.socketPath}\"\n`
     : "";
   const goBlock = options.goHostPath
-    ? `profile=\"\${SURF_HOST_PROFILE:-node-full}\"\nif [ \"$profile\" = \"core-go\" ] && [ -x \"${options.goHostPath}\" ]; then\n  exec \"${options.goHostPath}\"\nfi\n`
+    ? `profile=\"\${SURF_HOST_PROFILE:-${defaultProfile}}\"\nif [ \"$profile\" = \"core-go\" ] && [ -x \"${options.goHostPath}\" ]; then\n  exec \"${options.goHostPath}\"\nfi\n`
     : "";
   const content = `#!/bin/bash
 ${envLine}${goBlock}cd "${hostDir}"
@@ -308,9 +309,10 @@ function installWindowsRegistry(browser, extensionId, wrapperPath) {
   }
 }
 
-function installForBrowser(browser, extensionId, nodePath, hostPath) {
+function installForBrowser(browser, extensionId, nodePath, hostPath, options = {}) {
   const platform = process.platform;
   const browserConfig = BROWSERS[browser];
+  const requestedProfile = options.profile || "node-full";
 
   if (!browserConfig || !browserConfig[platform]) {
     return { installed: [], skipped: [BROWSERS[browser]?.name || browser], hints: [] };
@@ -330,8 +332,13 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
       ? buildGoHostBinary(wrapperDir, packageRoot)
       : { path: null, hint: null };
     if (goBuild.hint) hints.push(goBuild.hint);
+    if (requestedProfile === "core-go" && !goBuild.path) {
+      hints.push("Requested core-go profile, but Go host binary is unavailable.");
+      return { installed: [], skipped: [browserConfig.name], hints };
+    }
     const wrapperPath = createWrapper(wrapperDir, nodePath, hostPath, {
       goHostPath: goBuild.path || undefined,
+      defaultProfile: requestedProfile,
     });
     const manifestPath = installWindowsRegistry(browser, extensionId, wrapperPath);
     if (!manifestPath) return { installed: [], skipped: [browserConfig.name], hints };
@@ -354,6 +361,9 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
     ? buildGoHostBinary(standardWrapperDir, packageRoot)
     : { path: null, hint: null };
   if (standardGoBuild.hint) hints.push(standardGoBuild.hint);
+  if (requestedProfile === "core-go" && !standardGoBuild.path) {
+    hints.push("Requested core-go profile, but Go host binary is unavailable for the standard install target.");
+  }
   if (standardGoBuild.path) {
     hints.push(
       `core-go profile available. Set SURF_HOST_PROFILE=core-go to use ${standardGoBuild.path}`
@@ -362,8 +372,12 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
 
   if (browser === "chromium" && platform === "linux") {
     try {
+      if (requestedProfile === "core-go" && !standardGoBuild.path) {
+        throw new Error("Requested core-go profile, but Go host binary is unavailable.");
+      }
       const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath, {
         goHostPath: standardGoBuild.path || undefined,
+        defaultProfile: requestedProfile,
       });
       const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
       installed.push({ browser: browserConfig.name, path: manifestPath });
@@ -380,6 +394,9 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
         const snapRuntime = prepareSnapRuntime(snapWrapperDir, nodePath, hostPath);
         const snapGoBuild = buildGoHostBinary(snapWrapperDir, snapRuntime.packageRoot);
         if (snapGoBuild.hint) hints.push(`Snap target: ${snapGoBuild.hint}`);
+        if (requestedProfile === "core-go" && !snapGoBuild.path) {
+          throw new Error("Requested core-go profile, but Go host binary is unavailable for the snap target.");
+        }
         if (snapGoBuild.path) {
           hints.push(
             `Snap core-go profile available. Set SURF_HOST_PROFILE=core-go to use ${snapGoBuild.path}`
@@ -389,7 +406,11 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
           snapWrapperDir,
           snapRuntime.nodePath,
           snapRuntime.hostPath,
-          { socketPath: snapRuntime.socketPath, goHostPath: snapGoBuild.path || undefined }
+          {
+            socketPath: snapRuntime.socketPath,
+            goHostPath: snapGoBuild.path || undefined,
+            defaultProfile: requestedProfile,
+          }
         );
         const snapManifestPath = writeManifest(snapManifestDir, extensionId, snapWrapperPath);
         installed.push({ browser: `${browserConfig.name} (snap)`, path: snapManifestPath });
@@ -406,8 +427,12 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
   }
 
   try {
+    if (requestedProfile === "core-go" && !standardGoBuild.path) {
+      throw new Error("Requested core-go profile, but Go host binary is unavailable.");
+    }
     const wrapperPath = createWrapper(standardWrapperDir, nodePath, hostPath, {
       goHostPath: standardGoBuild.path || undefined,
+      defaultProfile: requestedProfile,
     });
     const manifestPath = writeManifest(standardManifestDir, extensionId, wrapperPath);
     installed.push({ browser: browserConfig.name, path: manifestPath });
@@ -421,17 +446,24 @@ function installForBrowser(browser, extensionId, nodePath, hostPath) {
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const result = { extensionId: null, browsers: ["chrome"] };
+  const result = { extensionId: null, browsers: ["chrome"], profile: "node-full" };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--browser" || arg === "-b") {
-      const browserArg = args[++i];
+    if (arg === "--browser" || arg === "-b" || arg.startsWith("--browser=")) {
+      const browserArg = arg.startsWith("--browser=")
+        ? arg.slice("--browser=".length)
+        : args[++i];
       if (browserArg === "all") {
         result.browsers = Object.keys(BROWSERS);
       } else {
         result.browsers = browserArg.split(",").map((b) => b.trim().toLowerCase());
       }
+    } else if (arg === "--profile" || arg === "-p" || arg.startsWith("--profile=")) {
+      const profileArg = arg.startsWith("--profile=")
+        ? arg.slice("--profile=".length)
+        : args[++i];
+      result.profile = String(profileArg || "").trim().toLowerCase();
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -456,11 +488,15 @@ Options:
   -b, --browser   Browser(s) to install for (default: chrome)
                   Values: chrome, chromium, brave, edge, arc, helium, all
                   Multiple: --browser chrome,brave
+  -p, --profile   Host runtime profile to prefer by default in the wrapper
+                  Values: node-full, core-go
+                  core-go requires surf-host-go to build successfully
 
 Examples:
   node install-native-host.cjs abcdefghijklmnopabcdefghijklmnop
   node install-native-host.cjs abcdefghijklmnop --browser brave
   node install-native-host.cjs abcdefghijklmnop --browser all
+  node install-native-host.cjs abcdefghijklmnop --browser chromium --profile core-go
 
 Runtime profile:
   SURF_HOST_PROFILE=node-full   # default Node host runtime
@@ -469,7 +505,7 @@ Runtime profile:
 }
 
 function main() {
-  const { extensionId, browsers } = parseArgs();
+  const { extensionId, browsers, profile } = parseArgs();
 
   if (!extensionId) {
     console.error("Error: Extension ID required");
@@ -483,6 +519,11 @@ function main() {
   if (!/^[a-p]{32}$/.test(extensionId)) {
     console.error("Error: Invalid extension ID format");
     console.error("Expected 32 lowercase letters (a-p)");
+    process.exit(1);
+  }
+  if (!["node-full", "core-go"].includes(profile)) {
+    console.error(`Error: Unsupported profile: ${profile}`);
+    console.error("Expected one of: node-full, core-go");
     process.exit(1);
   }
 
@@ -512,6 +553,7 @@ function main() {
   console.log(`Node: ${nodePath}`);
   console.log(`Host: ${hostPath}`);
   console.log(`Wrapper dir: ${wrapperDir}`);
+  console.log(`Default profile: ${profile}`);
   if (snapRoot) {
     console.log(`Chromium snap root detected: ${snapRoot}`);
   }
@@ -527,7 +569,7 @@ function main() {
       continue;
     }
 
-    const result = installForBrowser(browser, extensionId, nodePath, hostPath);
+    const result = installForBrowser(browser, extensionId, nodePath, hostPath, { profile });
     installed.push(...result.installed);
     skipped.push(...result.skipped);
     hints.push(...result.hints);

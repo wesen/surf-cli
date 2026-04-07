@@ -32,7 +32,7 @@ const runNode = (script, args) => {
   });
 };
 
-runNode(installScript, [extensionId, "--browser", "chromium"]);
+runNode(installScript, [extensionId, "--browser", "chromium", "--profile", "core-go"]);
 
 const standardManifest = path.join(
   fakeHome,
@@ -61,6 +61,7 @@ assert.ok(fs.existsSync(snapWrapper), "snap wrapper missing");
 
 const standardContent = fs.readFileSync(standardWrapper, "utf8");
 assert.ok(standardContent.includes("SURF_HOST_PROFILE"), "wrapper missing host profile logic");
+assert.ok(standardContent.includes("SURF_HOST_PROFILE:-core-go"), "wrapper should default to core-go when requested");
 
 runNode(uninstallScript, ["--browser", "chromium", "--all"]);
 
