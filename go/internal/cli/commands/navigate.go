@@ -20,11 +20,12 @@ type NavigateCommand struct {
 }
 
 type NavigateSettings struct {
-	URL       string `glazed:"url"`
-	Socket    string `glazed:"socket-path"`
-	TimeoutMS int    `glazed:"timeout-ms"`
-	TabID     int64  `glazed:"tab-id"`
-	WindowID  int64  `glazed:"window-id"`
+	URL         string `glazed:"url"`
+	Socket      string `glazed:"socket-path"`
+	TimeoutMS   int    `glazed:"timeout-ms"`
+	TabID       int64  `glazed:"tab-id"`
+	WindowID    int64  `glazed:"window-id"`
+	DebugSocket bool   `glazed:"debug-socket"`
 }
 
 func NewNavigateCommand() (*NavigateCommand, error) {
@@ -47,6 +48,7 @@ func NewNavigateCommand() (*NavigateCommand, error) {
 			fields.New("timeout-ms", fields.TypeInteger, fields.WithDefault(30000), fields.WithHelp("Socket request timeout in milliseconds")),
 			fields.New("tab-id", fields.TypeInteger, fields.WithDefault(int64(-1)), fields.WithHelp("Optional tab id override")),
 			fields.New("window-id", fields.TypeInteger, fields.WithDefault(int64(-1)), fields.WithHelp("Optional window id override")),
+			fields.New("debug-socket", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Log socket request/response frames to stderr")),
 		),
 		cmds.WithSections(glazedSection, commandSection),
 	)
@@ -68,6 +70,7 @@ func (c *NavigateCommand) RunIntoGlazeProcessor(
 	}
 
 	client := transport.NewClient(s.Socket, time.Duration(s.TimeoutMS)*time.Millisecond)
+	client.Debug = s.DebugSocket
 
 	args := map[string]any{"url": s.URL}
 	var tabID *int64

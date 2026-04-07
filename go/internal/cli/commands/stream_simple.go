@@ -28,6 +28,7 @@ type StreamSettings struct {
 	TimeoutMS   int    `glazed:"timeout-ms"`
 	DurationSec int    `glazed:"duration-sec"`
 	TabID       int64  `glazed:"tab-id"`
+	DebugSocket bool   `glazed:"debug-socket"`
 }
 
 func NewStreamCommand(name, short, streamType string) (*StreamCommand, error) {
@@ -50,6 +51,7 @@ func NewStreamCommand(name, short, streamType string) (*StreamCommand, error) {
 			fields.New("timeout-ms", fields.TypeInteger, fields.WithDefault(30000), fields.WithHelp("Connect timeout in milliseconds")),
 			fields.New("duration-sec", fields.TypeInteger, fields.WithDefault(30), fields.WithHelp("How long to stream before stopping")),
 			fields.New("tab-id", fields.TypeInteger, fields.WithDefault(int64(-1)), fields.WithHelp("Optional tab id override")),
+			fields.New("debug-socket", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Log socket request/response frames to stderr")),
 		),
 		cmds.WithSections(glazedSection, commandSection),
 	)
@@ -73,6 +75,7 @@ func (c *StreamCommand) RunIntoGlazeProcessor(
 	}
 
 	client := transport.NewClient(s.Socket, time.Duration(s.TimeoutMS)*time.Millisecond)
+	client.Debug = s.DebugSocket
 
 	streamCtx := ctx
 	cancel := func() {}

@@ -27,7 +27,16 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	help_cmd.SetupCobraRootCommand(helpSystem, rootCmd)
 	_ = logging.AddLoggingSectionToRootCommand(rootCmd, "surf-go")
 	rootCmd.AddCommand(newInstallCommand())
-	rootCmd.AddCommand(newChatGPTCommand())
+
+	chatGPTCmd, err := commands.NewChatGPTCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraChatGPT, err := buildGlazedCommand(chatGPTCmd)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraChatGPT)
 
 	rawCmd, err := commands.NewToolRawCommand()
 	if err != nil {

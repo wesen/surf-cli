@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"time"
 )
@@ -14,6 +15,7 @@ import (
 type Client struct {
 	SocketPath string
 	Timeout    time.Duration
+	Debug      bool
 }
 
 func NewClient(socketPath string, timeout time.Duration) *Client {
@@ -44,6 +46,7 @@ func (c *Client) Send(ctx context.Context, req map[string]any) (map[string]any, 
 		return nil, err
 	}
 	payload = append(payload, '\n')
+	c.debugSocket("client->host %s", payload)
 	if _, err := conn.Write(payload); err != nil {
 		return nil, err
 	}
@@ -53,6 +56,7 @@ func (c *Client) Send(ctx context.Context, req map[string]any) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
+	c.debugSocket("host->client %s", line)
 
 	var resp map[string]any
 	if err := json.Unmarshal(line, &resp); err != nil {
@@ -97,6 +101,7 @@ func (c *Client) Stream(
 		return err
 	}
 	payload = append(payload, '\n')
+	c.debugSocket("client->host(stream) %s", payload)
 	if _, err := conn.Write(payload); err != nil {
 		return err
 	}
@@ -122,6 +127,7 @@ func (c *Client) Stream(
 			}
 			return err
 		}
+		c.debugSocket("host->client(stream) %s", line)
 
 		var msg map[string]any
 		if err := json.Unmarshal(line, &msg); err != nil {
@@ -138,5 +144,15 @@ func (c *Client) Stream(
 				return err
 			}
 		}
+	}
+}
+
+func (c *Client) debugSocket(format string, args ...any) {
+	if !c.Debug {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[surf-go socket] "+format, args...)
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr)
 	}
 }
