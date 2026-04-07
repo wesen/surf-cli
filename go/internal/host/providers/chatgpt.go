@@ -853,6 +853,11 @@ func (b *chatGPTBridge) uploadFiles(ctx context.Context, rawFiles string) error 
 
 func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
+	previousLength := 0
+	stableCycles := 0
+	const requiredStableCycles = 6
+	const minStable = 1200 * time.Millisecond
+	lastChangeAt := time.Now()
 	expr := `(() => {
 	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
 	  let lastAssistantTurn = null;
@@ -873,7 +878,8 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	  const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
 	  const stopVisible = Boolean(document.querySelector('[data-testid="stop-button"]'));
 	  const finished = Boolean(lastAssistantTurn.querySelector('button[data-testid="copy-turn-action-button"], button[data-testid="good-response-turn-action-button"]'));
-	  return { text, stopVisible, finished };
+	  const messageId = messageRoot.getAttribute('data-message-id') || null;
+	  return { text, stopVisible, finished, messageId };
 	})()`
 
 	for time.Now().Before(deadline) {
@@ -883,8 +889,19 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 		}
 		m, _ := v.(map[string]any)
 		text := strings.TrimSpace(asString(m["text"]))
-		if text != "" && !asBool(m["stopVisible"]) && asBool(m["finished"]) {
-			return text, nil
+		currentLength := len(text)
+		if currentLength > previousLength {
+			previousLength = currentLength
+			stableCycles = 0
+			lastChangeAt = time.Now()
+		} else {
+			stableCycles++
+		}
+		if text != "" && !asBool(m["stopVisible"]) {
+			stableEnough := stableCycles >= requiredStableCycles && time.Since(lastChangeAt) >= minStable
+			if asBool(m["finished"]) || stableEnough {
+				return text, nil
+			}
 		}
 		time.Sleep(400 * time.Millisecond)
 	}

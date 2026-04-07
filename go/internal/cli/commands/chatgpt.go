@@ -35,6 +35,8 @@ type ChatGPTSettings struct {
 	DebugSocket bool   `glazed:"debug-socket"`
 }
 
+const chatGPTCommandTimeoutMargin = 60 * time.Second
+
 func NewChatGPTCommand() (*ChatGPTCommand, error) {
 	glazedSection, err := NewGlazedSchemaWithYAMLDefault()
 	if err != nil {
@@ -103,7 +105,15 @@ func (c *ChatGPTCommand) RunIntoGlazeProcessor(
 		toolArgs["timeout"] = s.TimeoutSec
 	}
 
-	client := transport.NewClient(s.Socket, time.Duration(s.TimeoutMS)*time.Millisecond)
+	socketTimeout := time.Duration(s.TimeoutMS) * time.Millisecond
+	queryTimeout := time.Duration(s.TimeoutSec) * time.Second
+	if queryTimeout > 0 {
+		minTimeout := queryTimeout + chatGPTCommandTimeoutMargin
+		if socketTimeout < minTimeout {
+			socketTimeout = minTimeout
+		}
+	}
+	client := transport.NewClient(s.Socket, socketTimeout)
 	client.Debug = s.DebugSocket
 
 	var tabID *int64
