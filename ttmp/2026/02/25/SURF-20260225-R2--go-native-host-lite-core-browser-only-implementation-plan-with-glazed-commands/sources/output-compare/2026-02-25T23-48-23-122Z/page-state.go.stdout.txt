@@ -1,0 +1,38 @@
+[
+{
+  "content": [
+    {
+      "text": "{\"id\":30,\"focusedElement\":{\"tag\":\"body\",\"type\":null},\"hasDatePicker\":false,\"hasDropdown\":false,\"hasModal\":false,\"hasOverlay\":false,\"title\":\"Example Domain\",\"url\":\"https://example.com/\"}",
+      "type": "text"
+    }
+  ],
+  "data": {
+    "focusedElement": {
+      "tag": "body",
+      "type": null
+    },
+    "hasDatePicker": false,
+    "hasDropdown": false,
+    "hasModal": false,
+    "hasOverlay": false,
+    "id": 30,
+    "title": "Example Domain",
+    "url": "https://example.com/"
+  },
+  "data_count": 8,
+  "data_kind": "object",
+  "error": "",
+  "id": "go-1772063306855393586",
+  "result": {
+    "content": [
+      {
+        "text": "{\"id\":30,\"focusedElement\":{\"tag\":\"body\",\"type\":null},\"hasDatePicker\":false,\"hasDropdown\":false,\"hasModal\":false,\"hasOverlay\":false,\"title\":\"Example Domain\",\"url\":\"https://example.com/\"}",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "{\"id\":30,\"focusedElement\":{\"tag\":\"body\",\"type\":null},\"hasDatePicker\":false,\"hasDropdown\":false,\"hasModal\":false,\"hasOverlay\":false,\"title\":\"Example Domain\",\"url\":\"https://example.com/\"}",
+  "tool": "page.state"
+}
+]

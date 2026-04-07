@@ -1,0 +1,13 @@
+{
+  "id": 14,
+  "focusedElement": {
+    "tag": "body",
+    "type": null
+  },
+  "hasDatePicker": false,
+  "hasDropdown": false,
+  "hasModal": false,
+  "hasOverlay": false,
+  "title": "Example Domain",
+  "url": "https://example.com/"
+}

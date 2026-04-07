@@ -1,0 +1,15 @@
+{
+  "name": "console-read",
+  "node": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "string",
+    "stderr_nonempty": false
+  },
+  "go": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "array(1)<object{error,message,response,status}>",
+    "stderr_nonempty": false
+  }
+}

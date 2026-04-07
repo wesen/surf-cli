@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "[\n  {\n    \"id\": 441388236,\n    \"title\": \"Extensions - Surf\",\n    \"url\": \"chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388279,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.com/\",\n    \"active\": true,\n    \"windowId\": 441388235\n  }\n]",
+  "response": "{\"id\":\"go-1772063157494071376\",\"result\":{\"content\":[{\"text\":\"[\\n  {\\n    \\\"id\\\": 441388236,\\n    \\\"title\\\": \\\"Extensions - Surf\\\",\\n    \\\"url\\\": \\\"chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm\\\",\\n    \\\"active\\\": false,\\n    \\\"windowId\\\": 441388235\\n  },\\n  {\\n    \\\"id\\\": 441388279,\\n    \\\"title\\\": \\\"Example Domain\\\",\\n    \\\"url\\\": \\\"https://example.com/\\\",\\n    \\\"active\\\": true,\\n    \\\"windowId\\\": 441388235\\n  }\\n]\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

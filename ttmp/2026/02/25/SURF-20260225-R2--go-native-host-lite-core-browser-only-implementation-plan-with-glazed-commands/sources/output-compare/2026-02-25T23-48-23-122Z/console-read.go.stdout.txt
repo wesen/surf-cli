@@ -1,0 +1,26 @@
+[
+{
+  "content": [
+    {
+      "text": "No console messages",
+      "type": "text"
+    }
+  ],
+  "data": null,
+  "data_count": 0,
+  "data_kind": "none",
+  "error": "",
+  "id": "go-1772063307708233805",
+  "result": {
+    "content": [
+      {
+        "text": "No console messages",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "No console messages",
+  "tool": "console"
+}
+]

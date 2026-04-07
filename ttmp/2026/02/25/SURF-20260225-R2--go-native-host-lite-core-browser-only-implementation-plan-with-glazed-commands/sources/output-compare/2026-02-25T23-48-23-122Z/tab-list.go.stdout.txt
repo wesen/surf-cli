@@ -1,0 +1,48 @@
+[
+{
+  "content": [
+    {
+      "text": "[\n  {\n    \"id\": 441388236,\n    \"title\": \"Extensions - Surf\",\n    \"url\": \"chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388279,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.org/\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388280,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.com/\",\n    \"active\": true,\n    \"windowId\": 441388235\n  }\n]",
+      "type": "text"
+    }
+  ],
+  "data": [
+    {
+      "active": false,
+      "id": 441388236,
+      "title": "Extensions - Surf",
+      "url": "chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm",
+      "windowId": 441388235
+    },
+    {
+      "active": false,
+      "id": 441388279,
+      "title": "Example Domain",
+      "url": "https://example.org/",
+      "windowId": 441388235
+    },
+    {
+      "active": true,
+      "id": 441388280,
+      "title": "Example Domain",
+      "url": "https://example.com/",
+      "windowId": 441388235
+    }
+  ],
+  "data_count": 3,
+  "data_kind": "array",
+  "error": "",
+  "id": "go-1772063305649683714",
+  "result": {
+    "content": [
+      {
+        "text": "[\n  {\n    \"id\": 441388236,\n    \"title\": \"Extensions - Surf\",\n    \"url\": \"chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388279,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.org/\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388280,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.com/\",\n    \"active\": true,\n    \"windowId\": 441388235\n  }\n]",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "[\n  {\n    \"id\": 441388236,\n    \"title\": \"Extensions - Surf\",\n    \"url\": \"chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388279,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.org/\",\n    \"active\": false,\n    \"windowId\": 441388235\n  },\n  {\n    \"id\": 441388280,\n    \"title\": \"Example Domain\",\n    \"url\": \"https://example.com/\",\n    \"active\": true,\n    \"windowId\": 441388235\n  }\n]",
+  "tool": "tab.list"
+}
+]

@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "Title: Example Domain\nURL: https://example.com/\n\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+  "response": "{\"id\":\"go-1772063158370355794\",\"result\":{\"content\":[{\"text\":\"Title: Example Domain\\nURL: https://example.com/\\n\\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

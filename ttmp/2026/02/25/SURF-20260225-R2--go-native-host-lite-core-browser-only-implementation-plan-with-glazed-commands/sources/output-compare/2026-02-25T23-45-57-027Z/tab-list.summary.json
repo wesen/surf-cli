@@ -1,0 +1,15 @@
+{
+  "name": "tab-list",
+  "node": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "array(2)<object{id,title,url,active,windowId}>",
+    "stderr_nonempty": false
+  },
+  "go": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "array(1)<object{error,message,response,status}>",
+    "stderr_nonempty": false
+  }
+}

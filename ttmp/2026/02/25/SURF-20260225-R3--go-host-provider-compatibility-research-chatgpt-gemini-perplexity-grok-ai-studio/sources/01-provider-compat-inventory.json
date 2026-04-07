@@ -1,0 +1,131 @@
+{
+  "generated_at": "2026-02-26T00:40:21.993Z",
+  "sources": {
+    "host_helpers": "/home/manuel/code/others/llms/pi/nicobailon/surf-cli/native/host-helpers.cjs",
+    "go_toolmap": "/home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/host/router/toolmap.go",
+    "service_worker": "/home/manuel/code/others/llms/pi/nicobailon/surf-cli/src/service-worker/index.ts"
+  },
+  "node_provider_tool_mappings": [
+    {
+      "tool": "chatgpt",
+      "native_message_type": "CHATGPT_QUERY",
+      "native_message_types": [
+        "CHATGPT_QUERY"
+      ],
+      "argument_keys": [
+        "query",
+        "model",
+        "withPage",
+        "file",
+        "timeout"
+      ]
+    },
+    {
+      "tool": "gemini",
+      "native_message_type": "GEMINI_QUERY",
+      "native_message_types": [
+        "GEMINI_QUERY"
+      ],
+      "argument_keys": [
+        "query",
+        "model",
+        "withPage",
+        "file",
+        "generateImage",
+        "editImage",
+        "output",
+        "youtube",
+        "aspectRatio",
+        "timeout"
+      ]
+    },
+    {
+      "tool": "perplexity",
+      "native_message_type": "PERPLEXITY_QUERY",
+      "native_message_types": [
+        "PERPLEXITY_QUERY"
+      ],
+      "argument_keys": [
+        "query",
+        "mode",
+        "model",
+        "withPage",
+        "timeout"
+      ]
+    },
+    {
+      "tool": "grok",
+      "native_message_type": "GROK_VALIDATE",
+      "native_message_types": [
+        "GROK_VALIDATE",
+        "GROK_QUERY"
+      ],
+      "argument_keys": [
+        "saveModels",
+        "query",
+        "model",
+        "deepSearch",
+        "withPage",
+        "timeout"
+      ]
+    },
+    {
+      "tool": "aistudio",
+      "native_message_type": "AISTUDIO_QUERY",
+      "native_message_types": [
+        "AISTUDIO_QUERY"
+      ],
+      "argument_keys": [
+        "query",
+        "model",
+        "withPage",
+        "timeout"
+      ]
+    },
+    {
+      "tool": "aistudio.build",
+      "native_message_type": "AISTUDIO_BUILD",
+      "native_message_types": [
+        "AISTUDIO_BUILD"
+      ],
+      "argument_keys": [
+        "query",
+        "model",
+        "output",
+        "keepOpen",
+        "timeout"
+      ]
+    }
+  ],
+  "go_provider_prefixes_blocked_in_core": [
+    "ai",
+    "chatgpt",
+    "gemini",
+    "perplexity",
+    "grok",
+    "aistudio",
+    "aistudio.build"
+  ],
+  "service_worker_provider_message_handlers": [
+    "GET_CHATGPT_COOKIES",
+    "CHATGPT_NEW_TAB",
+    "CHATGPT_CLOSE_TAB",
+    "CHATGPT_CDP_COMMAND",
+    "CHATGPT_EVALUATE",
+    "PERPLEXITY_NEW_TAB",
+    "PERPLEXITY_CLOSE_TAB",
+    "PERPLEXITY_CDP_COMMAND",
+    "PERPLEXITY_EVALUATE",
+    "GET_TWITTER_COOKIES",
+    "GROK_NEW_TAB",
+    "GROK_CLOSE_TAB",
+    "GROK_CDP_COMMAND",
+    "GROK_EVALUATE",
+    "AISTUDIO_NEW_TAB",
+    "AISTUDIO_CLOSE_TAB",
+    "AISTUDIO_CDP_COMMAND",
+    "AISTUDIO_EVALUATE",
+    "DOWNLOADS_SEARCH",
+    "GET_GOOGLE_COOKIES"
+  ]
+}

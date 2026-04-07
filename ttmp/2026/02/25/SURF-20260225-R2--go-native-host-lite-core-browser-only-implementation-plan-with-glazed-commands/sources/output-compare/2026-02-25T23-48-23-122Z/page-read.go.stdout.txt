@@ -1,0 +1,26 @@
+[
+{
+  "content": [
+    {
+      "text": "link \"Learn more\" [e1] [cursor=pointer] href=\"https://iana.org/domains/example\"\n\n[Viewport: 714x1797]\n--- Diff from previous snapshot ---\n[NO CHANGES]\n\n--- Page Text ---\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+      "type": "text"
+    }
+  ],
+  "data": null,
+  "data_count": 0,
+  "data_kind": "none",
+  "error": "",
+  "id": "go-1772063306025884948",
+  "result": {
+    "content": [
+      {
+        "text": "link \"Learn more\" [e1] [cursor=pointer] href=\"https://iana.org/domains/example\"\n\n[Viewport: 714x1797]\n--- Diff from previous snapshot ---\n[NO CHANGES]\n\n--- Page Text ---\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "link \"Learn more\" [e1] [cursor=pointer] href=\"https://iana.org/domains/example\"\n\n[Viewport: 714x1797]\n--- Diff from previous snapshot ---\n[NO CHANGES]\n\n--- Page Text ---\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+  "tool": "page.read"
+}
+]

@@ -1,0 +1,26 @@
+[
+{
+  "content": [
+    {
+      "text": "Title: Example Domain\nURL: https://example.com/\n\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+      "type": "text"
+    }
+  ],
+  "data": null,
+  "data_count": 0,
+  "data_kind": "none",
+  "error": "",
+  "id": "go-1772063306532506221",
+  "result": {
+    "content": [
+      {
+        "text": "Title: Example Domain\nURL: https://example.com/\n\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "Title: Example Domain\nURL: https://example.com/\n\nExample DomainThis domain is for use in documentation examples without needing permission. Avoid use in operations.Learn more",
+  "tool": "page.text"
+}
+]

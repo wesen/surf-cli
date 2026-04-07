@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "No network requests captured",
+  "response": "{\"id\":\"go-1772063159116666080\",\"result\":{\"content\":[{\"text\":\"No network requests captured\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

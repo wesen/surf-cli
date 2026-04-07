@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "OK",
+  "response": "{\"id\":\"go-1772063160820550661\",\"result\":{\"content\":[{\"text\":\"OK\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

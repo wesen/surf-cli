@@ -1,0 +1,26 @@
+[
+{
+  "content": [
+    {
+      "text": "OK",
+      "type": "text"
+    }
+  ],
+  "data": null,
+  "data_count": 0,
+  "data_kind": "none",
+  "error": "",
+  "id": "go-1772063308747983389",
+  "result": {
+    "content": [
+      {
+        "text": "OK",
+        "type": "text"
+      }
+    ]
+  },
+  "status": "ok",
+  "text": "OK",
+  "tool": "navigate"
+}
+]

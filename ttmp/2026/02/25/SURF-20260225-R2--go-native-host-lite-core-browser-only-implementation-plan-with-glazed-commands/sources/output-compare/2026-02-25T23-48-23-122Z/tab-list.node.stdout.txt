@@ -1,0 +1,23 @@
+[
+  {
+    "id": 441388236,
+    "title": "Extensions - Surf",
+    "url": "chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm",
+    "active": false,
+    "windowId": 441388235
+  },
+  {
+    "id": 441388279,
+    "title": "Example Domain",
+    "url": "https://example.org/",
+    "active": false,
+    "windowId": 441388235
+  },
+  {
+    "id": 441388280,
+    "title": "example.com",
+    "url": "https://example.com/",
+    "active": true,
+    "windowId": 441388235
+  }
+]

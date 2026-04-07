@@ -1,0 +1,58 @@
+topics:
+    - slug: chat
+      description: Chat backend and frontend surfaces
+    - slug: backend
+      description: Backend services
+    - slug: websocket
+      description: WebSocket lifecycle & events
+    - slug: linux
+      description: Linux platform topics
+    - slug: native-messaging
+      description: Browser native messaging topics
+    - slug: snap
+      description: Snap packaging and confinement topics
+    - slug: chromium
+      description: Chromium browser topics
+    - slug: debugging
+      description: Debugging investigations and troubleshooting
+    - slug: architecture
+      description: Architecture design and system-structure analysis
+    - slug: go
+      description: Go language tooling and runtime implementation
+    - slug: glazed
+      description: Glazed command authoring and structured CLI output
+    - slug: migration
+      description: Incremental transition from one runtime/architecture to another
+    - slug: chatgpt
+      description: ChatGPT provider integration and compatibility topics
+    - slug: providers
+      description: Cross-provider architecture and compatibility topics
+docTypes:
+    - slug: design-doc
+      description: Structured rationale and architecture notes
+    - slug: reference
+      description: Reference docs and API contracts
+    - slug: playbook
+      description: Operational procedures and QA/Smoke steps
+    - slug: index
+      description: Ticket landing page
+    - slug: skill
+      description: Skill documentation (what it's for and when to use it)
+intent:
+    - slug: long-term
+      description: Likely to persist
+    - slug: short-term
+      description: Short-term documentation for active work
+    - slug: throwaway
+      description: Temporary/experimental documentation
+status:
+    - slug: draft
+      description: Initial draft state
+    - slug: active
+      description: Active work in progress
+    - slug: review
+      description: Ready for review
+    - slug: complete
+      description: Work completed
+    - slug: archived
+      description: Archived/completed work

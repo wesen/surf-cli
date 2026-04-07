@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "{\"id\":15,\"focusedElement\":{\"tag\":\"body\",\"type\":null},\"hasDatePicker\":false,\"hasDropdown\":false,\"hasModal\":false,\"hasOverlay\":false,\"title\":\"Example Domain\",\"url\":\"https://example.com/\"}",
+  "response": "{\"id\":\"go-1772063158775688538\",\"result\":{\"content\":[{\"text\":\"{\\\"id\\\":15,\\\"focusedElement\\\":{\\\"tag\\\":\\\"body\\\",\\\"type\\\":null},\\\"hasDatePicker\\\":false,\\\"hasDropdown\\\":false,\\\"hasModal\\\":false,\\\"hasOverlay\\\":false,\\\"title\\\":\\\"Example Domain\\\",\\\"url\\\":\\\"https://example.com/\\\"}\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

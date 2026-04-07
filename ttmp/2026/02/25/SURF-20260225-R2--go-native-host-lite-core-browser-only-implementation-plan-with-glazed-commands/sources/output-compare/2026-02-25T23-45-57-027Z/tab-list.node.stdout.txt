@@ -1,0 +1,16 @@
+[
+  {
+    "id": 441388236,
+    "title": "Extensions - Surf",
+    "url": "chrome://extensions/?id=jgbccjmbpfinlegbjkomjeoiklaijmmm",
+    "active": false,
+    "windowId": 441388235
+  },
+  {
+    "id": 441388279,
+    "title": "",
+    "url": "",
+    "active": true,
+    "windowId": 441388235
+  }
+]

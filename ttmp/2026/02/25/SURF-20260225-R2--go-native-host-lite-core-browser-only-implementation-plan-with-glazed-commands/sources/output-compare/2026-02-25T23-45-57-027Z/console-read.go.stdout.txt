@@ -1,0 +1,8 @@
+[
+{
+  "error": "",
+  "message": "No console messages",
+  "response": "{\"id\":\"go-1772063159482110610\",\"result\":{\"content\":[{\"text\":\"No console messages\",\"type\":\"text\"}]},\"type\":\"tool_response\"}",
+  "status": "ok"
+}
+]

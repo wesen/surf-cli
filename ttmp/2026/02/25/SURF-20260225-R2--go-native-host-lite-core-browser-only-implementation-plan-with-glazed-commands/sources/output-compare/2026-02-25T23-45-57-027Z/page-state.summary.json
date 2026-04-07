@@ -1,0 +1,15 @@
+{
+  "name": "page-state",
+  "node": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "object{id,focusedElement,hasDatePicker,hasDropdown,hasModal,hasOverlay,title,url}",
+    "stderr_nonempty": false
+  },
+  "go": {
+    "ok": true,
+    "status": 0,
+    "stdout_shape": "array(1)<object{error,message,response,status}>",
+    "stderr_nonempty": false
+  }
+}
