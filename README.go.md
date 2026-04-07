@@ -99,6 +99,8 @@ Test with Go CLI (talks to host socket):
 cd go
 go run ./cmd/surf-go tab list
 go run ./cmd/surf-go page read
+go run ./cmd/surf-go chatgpt "say ping"
+go run ./cmd/surf-go chatgpt --list-models
 ```
 
 Test ChatGPT through raw tool path:
