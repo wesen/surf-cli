@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nicobailon/surf-cli/gohost/internal/host/pending"
+	"github.com/nicobailon/surf-cli/gohost/internal/host/router"
 	"github.com/nicobailon/surf-cli/gohost/internal/host/socketbridge"
 )
 
@@ -40,7 +41,7 @@ func TestHandleSessionLineDispatchesChatGPTProvider(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		h.handleSessionLine(session, line)
+		h.handleSessionLine(context.Background(), session, line)
 	}()
 
 	resp := readLineJSON(t, client)
@@ -78,7 +79,7 @@ func TestHandleSessionLineChatGPTProviderError(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		h.handleSessionLine(session, line)
+		h.handleSessionLine(context.Background(), session, line)
 	}()
 
 	resp := readLineJSON(t, client)
@@ -109,7 +110,7 @@ func TestHandleSessionLineGeminiStillBlocked(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		h.handleSessionLine(session, line)
+		h.handleSessionLine(context.Background(), session, line)
 	}()
 
 	resp := readLineJSON(t, client)
@@ -135,4 +136,42 @@ func readLineJSON(t *testing.T, conn net.Conn) map[string]any {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 	return msg
+}
+
+func TestHandleSessionDisconnectCancelsChatGPTProvider(t *testing.T) {
+	server, client := net.Pipe()
+	session := socketbridge.NewSession(server)
+
+	canceled := make(chan struct{}, 1)
+	h := &hostRuntime{
+		log:      log.New(io.Discard, "", 0),
+		sessions: socketbridge.NewSessionManager(),
+		pending:  pending.NewStore(),
+		streams:  router.NewStreamRegistry(),
+		runChatGPTTool: func(ctx context.Context, _ map[string]any, _ *int64, _ func(string, ...any)) (map[string]any, error) {
+			<-ctx.Done()
+			canceled <- struct{}{}
+			return nil, ctx.Err()
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.handleSession(context.Background(), session)
+	}()
+
+	_, err := client.Write([]byte(`{"type":"tool_request","method":"execute_tool","params":{"tool":"chatgpt","args":{"query":"hello"}},"id":"req-cancel"}` + "\n"))
+	if err != nil {
+		t.Fatalf("failed to write request: %v", err)
+	}
+	_ = client.Close()
+
+	select {
+	case <-canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected provider context to be canceled when client disconnected")
+	}
+
+	<-done
 }

@@ -156,13 +156,15 @@ func (h *hostRuntime) acceptLoop(ctx context.Context, listener socketbridge.List
 }
 
 func (h *hostRuntime) handleSession(ctx context.Context, session *socketbridge.Session) {
+	sessionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	defer h.disconnectSession(session)
 
 	reader := bufio.NewReader(session.Conn())
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			h.handleSessionLine(session, line)
+			h.handleSessionLine(sessionCtx, session, line)
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -180,7 +182,7 @@ func (h *hostRuntime) handleSession(ctx context.Context, session *socketbridge.S
 	}
 }
 
-func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []byte) {
+func (h *hostRuntime) handleSessionLine(ctx context.Context, session *socketbridge.Session, line []byte) {
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
 		return
@@ -201,12 +203,14 @@ func (h *hostRuntime) handleSessionLine(session *socketbridge.Session, line []by
 			return
 		}
 		if strings.TrimSpace(req.Params.Tool) == "chatgpt" {
-			result, err := h.runChatGPTTool(context.Background(), req.Params.Args, req.TabID, h.log.Printf)
-			if err != nil {
-				h.sendToolError(session, requestOriginalID(req), err.Error())
-				return
-			}
-			h.sendToolResult(session, requestOriginalID(req), result)
+			go func() {
+				result, err := h.runChatGPTTool(ctx, req.Params.Args, req.TabID, h.log.Printf)
+				if err != nil {
+					h.sendToolError(session, requestOriginalID(req), err.Error())
+					return
+				}
+				h.sendToolResult(session, requestOriginalID(req), result)
+			}()
 			return
 		}
 

@@ -52,14 +52,30 @@ func (c *Client) Send(ctx context.Context, req map[string]any) (map[string]any, 
 	}
 
 	reader := bufio.NewReader(conn)
-	line, err := reader.ReadBytes('\n')
-	if err != nil {
-		return nil, err
+	type readResult struct {
+		line []byte
+		err  error
 	}
-	c.debugSocket("host->client %s", line)
+	resultCh := make(chan readResult, 1)
+	go func() {
+		line, err := reader.ReadBytes('\n')
+		resultCh <- readResult{line: line, err: err}
+	}()
+
+	var result readResult
+	select {
+	case <-ctx.Done():
+		_ = conn.Close()
+		return nil, ctx.Err()
+	case result = <-resultCh:
+	}
+	if result.err != nil {
+		return nil, result.err
+	}
+	c.debugSocket("host->client %s", result.line)
 
 	var resp map[string]any
-	if err := json.Unmarshal(line, &resp); err != nil {
+	if err := json.Unmarshal(result.line, &resp); err != nil {
 		return nil, err
 	}
 	return resp, nil

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -91,5 +92,40 @@ func TestClientStream(t *testing.T) {
 	}
 	if got != "hello" {
 		t.Fatalf("unexpected stream message: %q", got)
+	}
+}
+
+func TestClientSendCanceledContext(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _ = bufio.NewReader(conn).ReadBytes('\n')
+		time.Sleep(2 * time.Second)
+	}()
+
+	client := NewClient(sock, 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	started := time.Now()
+	_, err = client.Send(ctx, map[string]any{"type": "tool_request", "id": "cancel-me"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got: %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatalf("send should have returned quickly after cancel, took %s", time.Since(started))
 	}
 }
