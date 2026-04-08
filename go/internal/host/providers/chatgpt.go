@@ -864,6 +864,22 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	expr := `(() => {
 	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
 	  const assistantNodes = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], [data-turn="assistant"]'));
+	  const assistantSummaries = assistantNodes.slice(-3).map((node, idx) => {
+	    const contentRoot =
+	      node.querySelector('.markdown') ||
+	      node.querySelector('[data-message-content]') ||
+	      node.querySelector('.prose') ||
+	      node;
+	    const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
+	    return {
+	      indexFromEnd: assistantNodes.length - Math.min(assistantNodes.length, 3) + idx,
+	      textLength: text.length,
+	      textPreview: text.slice(0, 120),
+	      hasMarkdown: Boolean(node.querySelector('.markdown')),
+	      hasProse: Boolean(node.querySelector('.prose')),
+	      messageId: node.getAttribute('data-message-id') || null,
+	    };
+	  });
 	  let lastAssistantTurn = null;
 	  let messageRoot = null;
 	  if (assistantNodes.length > 0) {
@@ -891,6 +907,7 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	      assistantCount: assistantNodes.length,
 	      turnCount: turns.length,
 	      foundAssistant: false,
+	      assistantSummaries,
 	    };
 	  }
 	  const contentRoot = messageRoot.querySelector('.markdown') || messageRoot.querySelector('[data-message-content]') || messageRoot.querySelector('.prose') || messageRoot;
@@ -906,6 +923,7 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	    assistantCount: assistantNodes.length,
 	    turnCount: turns.length,
 	    foundAssistant: true,
+	    assistantSummaries,
 	  };
 	})()`
 

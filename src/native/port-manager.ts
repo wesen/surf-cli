@@ -39,6 +39,10 @@ function extractChatGPTEvaluateDetails(result: any): Record<string, any> | null 
   if ("turnIndex" in innerValue) details.turnIndex = innerValue.turnIndex;
   if ("status" in innerValue) details.status = innerValue.status;
   if ("hasLoginCta" in innerValue) details.hasLoginCta = innerValue.hasLoginCta;
+  if ("assistantCount" in innerValue) details.assistantCount = innerValue.assistantCount;
+  if ("turnCount" in innerValue) details.turnCount = innerValue.turnCount;
+  if ("foundAssistant" in innerValue) details.foundAssistant = innerValue.foundAssistant;
+  if ("assistantSummaries" in innerValue) details.assistantSummaries = innerValue.assistantSummaries;
   if (Object.keys(details).length === 0) return null;
   return details;
 }
