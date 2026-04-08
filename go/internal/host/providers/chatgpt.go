@@ -126,7 +126,7 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 	}
 	logf("[chatgpt] opened tab %d", tabID)
 
-	bridge := &chatGPTBridge{caller: caller, tabID: tabID}
+	bridge := &chatGPTBridge{caller: caller, tabID: tabID, logf: logf}
 	defer func() {
 		_, _ = caller.Request(context.Background(), map[string]any{
 			"type":  "CHATGPT_CLOSE_TAB",
@@ -206,6 +206,7 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 type chatGPTBridge struct {
 	caller NativeCaller
 	tabID  int64
+	logf   func(string, ...any)
 }
 
 type chatGPTLoginStatus struct {
@@ -858,6 +859,8 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	const requiredStableCycles = 6
 	const minStable = 1200 * time.Millisecond
 	lastChangeAt := time.Now()
+	polls := 0
+	lastLoggedState := ""
 	expr := `(() => {
 	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
 	  let lastAssistantTurn = null;
@@ -883,6 +886,7 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	})()`
 
 	for time.Now().Before(deadline) {
+		polls++
 		v, err := b.evaluate(ctx, expr, extCallTimeout)
 		if err != nil {
 			return "", err
@@ -897,13 +901,28 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 		} else {
 			stableCycles++
 		}
+		stableEnough := stableCycles >= requiredStableCycles && time.Since(lastChangeAt) >= minStable
+		state := fmt.Sprintf("len=%d stop=%v finished=%v stableCycles=%d stableEnough=%v", currentLength, asBool(m["stopVisible"]), asBool(m["finished"]), stableCycles, stableEnough)
+		if b.logf != nil && (state != lastLoggedState || polls == 1 || polls%25 == 0) {
+			lastLoggedState = state
+			b.logf("[chatgpt] waitForResponse poll=%d %s", polls, state)
+		}
 		if text != "" && !asBool(m["stopVisible"]) {
-			stableEnough := stableCycles >= requiredStableCycles && time.Since(lastChangeAt) >= minStable
 			if asBool(m["finished"]) || stableEnough {
+				if b.logf != nil {
+					reason := "finished"
+					if !asBool(m["finished"]) && stableEnough {
+						reason = "stable"
+					}
+					b.logf("[chatgpt] waitForResponse returning after poll=%d reason=%s len=%d", polls, reason, currentLength)
+				}
 				return text, nil
 			}
 		}
 		time.Sleep(400 * time.Millisecond)
+	}
+	if b.logf != nil {
+		b.logf("[chatgpt] waitForResponse timed out after poll=%d", polls)
 	}
 	return "", fmt.Errorf("Response timeout")
 }

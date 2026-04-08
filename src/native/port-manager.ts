@@ -27,6 +27,26 @@ function summarizeNativePayload(value: any): any {
   if ("error" in value) summary.error = value.error;
   if ("result" in value && value.result && typeof value.result === "object") {
     summary.resultKeys = Object.keys(value.result);
+    const innerResult = value.result as Record<string, any>;
+    if ("value" in innerResult) {
+      const innerValue = innerResult.value;
+      if (typeof innerValue === "string") {
+        summary.resultValuePreview = innerValue.slice(0, 120);
+      } else if (Array.isArray(innerValue)) {
+        summary.resultValueLength = innerValue.length;
+      } else if (innerValue && typeof innerValue === "object") {
+        summary.resultValueKeys = Object.keys(innerValue);
+        if (typeof innerValue.text === "string") {
+          summary.resultTextLength = innerValue.text.length;
+          summary.resultTextPreview = innerValue.text.slice(0, 120);
+        }
+        if ("stopVisible" in innerValue) summary.resultStopVisible = innerValue.stopVisible;
+        if ("finished" in innerValue) summary.resultFinished = innerValue.finished;
+        if ("messageId" in innerValue) summary.resultMessageId = innerValue.messageId;
+      } else {
+        summary.resultValue = innerValue;
+      }
+    }
   }
   if ("cookies" in value && Array.isArray(value.cookies)) {
     summary.cookies = value.cookies.length;
