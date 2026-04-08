@@ -217,3 +217,27 @@ Adjusted surf-go formatter to emit parsed payloads as direct rows rather than wr
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_simple.go — Emit multiple rows
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/tool_raw.go — Emit multiple rows
 - /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/navigate.go — Emit multiple rows
+
+## 2026-04-07 - Completed Snap Go-host activation, ChatGPT command wiring, and runtime diagnostics
+
+Resumed the Go-host rollout by fixing profile-aware installation, adding a first-class `surf-go chatgpt` command, and adding runtime-identification handshake fields so Snap Chromium could explicitly report whether it launched `go-host` or fell back to `node-host`.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/chatgpt.go — First-class ChatGPT command
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Command registration and root wiring
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/scripts/install-native-host.cjs — Fixed `--profile core-go` parsing and Go install path handling
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/installer/native_host.go — Go installer support for native host deployment
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — `HOST_READY` runtime/socket diagnostics
+
+## 2026-04-07 - Propagated CLI cancellation to host-side ChatGPT polling (commit 3e30858)
+
+Fixed `surf-go` interrupt handling so `Ctrl-C` cancels the active socket request, and tied Go-host ChatGPT provider work to the client session lifecycle so connection teardown aborts host-side polling instead of waiting for long provider timeouts.
+
+### Related Files
+
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/main.go — Signal-aware root context
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client.go — Context-aware socket read cancellation
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/transport/client_test.go — Cancellation regression coverage
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main.go — Session-derived provider context and async ChatGPT dispatch
+- /home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-host-go/main_test.go — Session-disconnect cancellation test

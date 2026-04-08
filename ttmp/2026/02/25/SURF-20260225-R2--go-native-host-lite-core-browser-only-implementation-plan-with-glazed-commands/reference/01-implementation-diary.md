@@ -47,7 +47,7 @@ ExternalSources:
     - /home/manuel/.codex/skills/glazed-command-authoring/SKILL.md
     - /home/manuel/.codex/skills/ticket-research-docmgr-remarkable/SKILL.md
 Summary: Chronological diary for creating the Go Host Lite + Glazed command implementation plan ticket and delivery bundle.
-LastUpdated: 2026-02-25T17:39:00-05:00
+LastUpdated: 2026-04-07T22:05:00-04:00
 WhatFor: Preserve exact planning context, evidence, and command trace for continuation
 WhenToUse: Use when continuing implementation from this planning ticket
 ---
@@ -929,3 +929,206 @@ For object payloads, one object row is emitted directly. For array payloads, one
 - Object payloads: `map[string]any` -> one row from map keys/values.
 - Array payloads: `[]any` -> one row per item; object items become map rows.
 - Text payloads: fallback row with `content` key.
+
+## Step 21: Snap Go-Host Install Path and `surf-go chatgpt` CLI Completion
+
+This step resumed the original Go-host rollout ticket after the earlier core-browser work had landed. The user had already validated that the browser side could talk to a native host, but the actual active runtime and install path were unclear, and `surf-go` still lacked a first-class `chatgpt` verb.
+
+The work here tightened the install story, proved which runtime Chromium Snap was actually launching, and closed the remaining CLI ergonomics gaps so ChatGPT could be exercised without falling back to raw JSON transport commands.
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, how can we trigger a chatgpt research from the CLI?"
+
+**Assistant interpretation:** Add and document a direct ChatGPT command path in `surf-go`, and make the Go-host installation/runtime path observable enough to debug Snap Chromium.
+
+**Inferred user intent:** Use the Go host as a practical daily CLI, not only as a transport experiment or raw-tool prototype.
+
+**Commit (code):** af65315 — "feat(surf-go): add chatgpt command"
+
+### What I did
+
+- Added a first-class `chatgpt` Glazed command in:
+  - `go/internal/cli/commands/chatgpt.go`
+- Registered the command in:
+  - `go/cmd/surf-go/main.go`
+- Added tests for command wiring/output in:
+  - `go/cmd/surf-go/chatgpt_command_test.go`
+- Added Go-native install support and fixed `--profile core-go` parsing so Node installer invocations no longer mis-parse `core-go` as an extension ID:
+  - `scripts/install-native-host.cjs`
+  - `go/cmd/surf-go/install_command.go`
+  - `go/internal/installer/native_host.go`
+- Added runtime-identification handshake fields (`runtime`, `socketPath`) so the service worker can show whether it is connected to `node-host` or `go-host`.
+
+### Why
+
+- The user needed a direct `surf-go chatgpt` workflow rather than `tool-raw`.
+- Snap Chromium debugging had become ambiguous because the wrapper could silently fall back from Go to Node if `surf-host-go` was missing.
+- The earlier installer behavior made `--profile core-go` effectively unusable during manual testing.
+
+### What worked
+
+- `surf-go chatgpt` became a first-class command.
+- The service worker now reports:
+  - `Native host ready: { runtime: "go-host", socketPath: "/home/manuel/snap/chromium/common/surf-cli/surf.sock" }`
+- Manifest/wrapper inspection proved the active launch path:
+  - manifest: `~/snap/chromium/common/chromium/NativeMessagingHosts/surf.browser.host.json`
+  - wrapper: `~/snap/chromium/common/surf-cli/host-wrapper.sh`
+  - Go host binary: `~/snap/chromium/common/surf-cli/surf-host-go`
+- The user confirmed `ps aux | grep surf-host-go` showed the Go host running from the snap path.
+
+### What didn't work
+
+- `node scripts/install-native-host.cjs <id> --browser chromium --profile core-go` initially failed with:
+  - `Error: Invalid extension ID format`
+  - `Expected 32 lowercase letters (a-p)`
+- Root cause: the installer script did not actually parse `--profile`, so `core-go` was treated as a positional extension ID.
+
+### What I learned
+
+- For Snap Chromium, the installed runtime path and the debug/runtime handshake are more trustworthy than `ps` output alone.
+- The wrapper fallback behavior is safe operationally, but opaque without explicit runtime identification in `HOST_READY`.
+- A first-class command matters because it exposes timeout/cancellation/debugging issues that raw transport tests hide.
+
+### What was tricky to build
+
+- The install story spans three layers:
+  - native messaging manifest,
+  - wrapper script with profile fallback,
+  - copied runtime payload inside `~/snap/chromium/common/surf-cli/`
+- It was easy to confuse "the manifest points to a wrapper" with "the wrapper is actually launching Go". The runtime handshake removed that ambiguity.
+
+### What warrants a second pair of eyes
+
+- The installer and wrapper now support both Node and Go runtime paths. That dual-runtime packaging logic is worth reviewing for drift between the copied payload and the local checkout.
+
+### What should be done in the future
+
+1. Keep the runtime-identification fields in handshake responses; they are high-value debugging data.
+2. Consider surfacing the active runtime in CLI diagnostics too, not only in service-worker logs.
+
+### Code review instructions
+
+- Start with:
+  - `go/internal/cli/commands/chatgpt.go`
+  - `go/cmd/surf-go/main.go`
+  - `scripts/install-native-host.cjs`
+  - `go/internal/installer/native_host.go`
+- Validate with:
+  - `cd go && go run ./cmd/surf-go chatgpt --help`
+  - `cd go && go run ./cmd/surf-go install <extension-id> --browser chromium`
+  - reload extension and inspect service-worker `HOST_READY` log
+
+### Technical details
+
+- Snap Chromium native messaging manifest path:
+  - `~/snap/chromium/common/chromium/NativeMessagingHosts/surf.browser.host.json`
+- Snap wrapper path:
+  - `~/snap/chromium/common/surf-cli/host-wrapper.sh`
+- Go-host activation condition in wrapper:
+  - `profile=core-go` and executable `~/snap/chromium/common/surf-cli/surf-host-go`
+
+## Step 22: Cancellation Propagation from `surf-go` to Go-Host ChatGPT Polling
+
+This step addressed the remaining operational bug after ChatGPT queries were working end-to-end: `Ctrl-C` on the local CLI did not stop the command promptly, and the host-side ChatGPT poller could continue running until its own timeout. That was the wrong lifecycle. Local interruption needs to tear down the socket request immediately and cancel the provider loop in the host.
+
+The implementation split into two halves. First, the CLI needed a signal-aware command context and a transport read path that stops waiting as soon as the context is canceled. Second, the host needed to stop running ChatGPT provider work on `context.Background()` and instead tie provider execution to the client session lifetime so disconnects propagate.
+
+### Prompt Context
+
+**User prompt (verbatim):** "yes, please update the diary. \n\nand commit the changes. \n\nAlso, Ctrl-C on the surf-go binary doesn't seem to work / cancel, and it would also need to interrupt the polling on the host if that is possible?"
+
+**Assistant interpretation:** Document the recent runtime/debugging work and fix request cancellation so a local interrupt aborts both the CLI wait and the host-side polling loop.
+
+**Inferred user intent:** Make the Go-host ChatGPT workflow robust enough for repeated real use, not only one successful run.
+
+**Commit (code):** 3e30858 — "fix(go): propagate cli cancellation to chatgpt polling"
+
+### What I did
+
+- Made `surf-go` use a signal-aware root context:
+  - `go/cmd/surf-go/main.go`
+  - switched from `rootCmd.Execute()` to `rootCmd.ExecuteContext(signal.NotifyContext(...))`
+- Made the CLI transport respect cancellation during the blocking read:
+  - `go/internal/cli/transport/client.go`
+  - `Client.Send` now races socket read against `ctx.Done()` and closes the connection on cancel
+- Added transport cancellation coverage:
+  - `go/internal/cli/transport/client_test.go`
+- Made host ChatGPT execution session-scoped instead of `context.Background()`:
+  - `go/cmd/surf-host-go/main.go`
+  - `handleSession` now derives `sessionCtx`
+  - `chatgpt` requests run in a goroutine using `sessionCtx`
+- Added host test coverage proving disconnect cancels provider context:
+  - `go/cmd/surf-host-go/main_test.go`
+
+### Why
+
+- The existing flow could only end in:
+  - normal completion,
+  - host timeout,
+  - extension disconnect.
+- `Ctrl-C` should be a first-class termination path for long provider requests.
+- Without session-derived context, the host had no reason to stop polling after the client disappeared.
+
+### What worked
+
+- The new transport test confirms canceled contexts return quickly instead of waiting for the full socket deadline.
+- The new host test confirms client disconnect cancels the provider context.
+- Narrow validation passed:
+  - `cd go && go test ./internal/cli/transport ./cmd/surf-go ./cmd/surf-host-go`
+  - `cd go && go test ./internal/host/providers`
+
+### What didn't work
+
+- First test run from repo root failed because the outer repository Go module shadowed `surf-cli/go`:
+  - `main module (github.com/go-go-golems/openai-realtime) does not contain package ...`
+- Resolution: reran tests from `cd go`.
+- One compile miss remained after the first patch:
+  - `cmd/surf-host-go/main_test.go:149:13: undefined: router`
+- Resolution: imported `github.com/nicobailon/surf-cli/gohost/internal/host/router` in the new host test.
+
+### What I learned
+
+- Cancellation needed both halves:
+  - client-side `ctx.Done()` handling
+  - host-side session-derived provider context
+- Fixing only the CLI transport would have left the host polling after disconnect; fixing only the host would still leave the CLI hung on a blocking socket read.
+
+### What was tricky to build
+
+- The original `handleSession` loop executed ChatGPT provider work inline. That prevented the read loop from observing connection teardown while the provider was busy.
+- Running ChatGPT execution in a goroutine was necessary so the session reader could keep progressing to EOF and trigger cancellation.
+- The patch had to preserve existing synchronous behavior for normal core tool forwarding while changing the provider path only where lifecycle coupling mattered.
+
+### What warrants a second pair of eyes
+
+- Session teardown and provider goroutine interaction in `go/cmd/surf-host-go/main.go`; the concurrency model is still simple, but it is now more concurrent than before.
+
+### What should be done in the future
+
+1. Consider adding explicit request cancellation messages for long provider operations if future providers need richer cleanup than socket disconnect.
+2. Consider small helper utilities for context-aware sleep/poll loops in provider packages to reduce cancellation latency below the current poll interval.
+
+### Code review instructions
+
+- Review:
+  - `go/cmd/surf-go/main.go`
+  - `go/internal/cli/transport/client.go`
+  - `go/cmd/surf-host-go/main.go`
+  - `go/internal/cli/transport/client_test.go`
+  - `go/cmd/surf-host-go/main_test.go`
+- Validate with:
+  - `cd go && go test ./internal/cli/transport ./cmd/surf-go ./cmd/surf-host-go`
+  - `cd go && go test ./internal/host/providers`
+  - live manual check: start `go run ./cmd/surf-go chatgpt "hello"` and press `Ctrl-C`
+
+### Technical details
+
+- Previous host behavior:
+  - `runChatGPTTool(context.Background(), ...)`
+- New host behavior:
+  - `runChatGPTTool(sessionCtx, ...)`
+- Previous CLI behavior:
+  - blocking `ReadBytes('\n')` until deadline
+- New CLI behavior:
+  - goroutine read + `select` on `ctx.Done()` + `conn.Close()` on cancel

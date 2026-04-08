@@ -21,7 +21,7 @@ RelatedFiles:
       Note: Generated inventory artifact
 ExternalSources: []
 Summary: Chronological log of all investigation commands, findings, fixes, and delivery steps for provider compatibility research.
-LastUpdated: 2026-02-26T20:20:00-05:00
+LastUpdated: 2026-04-07T22:05:00-04:00
 WhatFor: Preserve reproducible investigation history for continuation and review.
 WhenToUse: Use when implementing provider support or auditing why design decisions were made.
 ---
@@ -436,3 +436,78 @@ npx biome check native/chatgpt-client.cjs native/host.cjs src/service-worker/ind
 Outcome:
 1. Failed due existing repository Biome config/version mismatch (`biome.json` schema 2.3.11 vs CLI 2.4.4) and unrelated rule key compatibility.
 2. No code changes made for this; issue pre-exists in repo tooling config.
+
+### Entry 8 - Snap Chromium runtime diagnosis, polling fixes, and Go-host confirmation (2026-04-07 evening EDT / 2026-04-08 host-log timestamps)
+
+Goal:
+1. Confirm whether Chromium Snap was actually launching `surf-host-go` or silently falling back to Node.
+2. Make ChatGPT list-models/query debugging observable in both the service worker and Go host.
+3. Fix the Go ChatGPT response poller so it recognizes the rendered assistant response instead of looping on empty text.
+
+Commands and evidence gathered:
+
+```bash
+cat ~/snap/chromium/common/chromium/NativeMessagingHosts/surf.browser.host.json
+cat ~/snap/chromium/common/surf-cli/host-wrapper.sh
+ls -l ~/snap/chromium/common/surf-cli/
+snap run --shell chromium -c 'tail -n 120 /tmp/surf-host-go.log'
+go run ./cmd/surf-go chatgpt hello --debug-socket
+go run ./cmd/surf-go tool-raw --tool chatgpt --args-json '{"list-models":true}'
+```
+
+Service worker evidence added during this phase:
+1. Native-host request lifecycle logs (`Handling native host request`, `Native host handler resolved`, `Sent response to native host`).
+2. `HOST_READY` runtime diagnostics:
+   - `runtime: "go-host" | "node-host"`
+   - `socketPath`
+3. `CHATGPT_EVALUATE` detail summaries for model parsing and response polling.
+
+Host-side findings:
+1. The snap manifest correctly pointed to `~/snap/chromium/common/surf-cli/host-wrapper.sh`.
+2. The wrapper defaulted to `profile=core-go` but only used Go if `~/snap/chromium/common/surf-cli/surf-host-go` existed and was executable.
+3. Before reinstall, the wrapper fell back to:
+   - copied Node binary + `runtime/surf-cli/native/host.cjs`
+4. After reinstall/copy, service worker `HOST_READY` explicitly showed:
+   - `runtime: "go-host"`
+   - `socketPath: "/home/manuel/snap/chromium/common/surf-cli/surf.sock"`
+
+Polling failure evidence:
+1. Initial Go-host logs showed:
+   - `waitForResponse poll=N len=0 stop=true/false finished=false ...`
+2. That proved transport was healthy but the DOM extractor never found the assistant response text.
+3. User-provided DOM inspection showed the actual response under:
+   - `div[data-message-author-role="assistant"]`
+   - inner `.markdown`
+   - `<p>...</p>`
+
+Code changes made during this investigation:
+1. `go/internal/host/providers/chatgpt.go`
+   - switched response extraction to prefer direct assistant nodes (`[data-message-author-role="assistant"], [data-turn="assistant"]`)
+   - added assistant node summaries (`textLength`, `textPreview`, `hasMarkdown`, `messageId`)
+   - ported/stabilized Node-like completion heuristics
+2. `src/native/port-manager.ts`
+   - added native-host request/response lifecycle logs
+   - added nested result summaries for `CHATGPT_EVALUATE`
+3. `native/host.cjs` and `go/cmd/surf-host-go/main.go`
+   - added runtime/socket handshake metadata
+
+What worked:
+1. `surf-go chatgpt` and `tool-raw --tool chatgpt` eventually returned valid responses through the Go host.
+2. `--list-models` resumed reporting canonical IDs instead of UI labels after model parser fixes.
+3. Snap-private host logs became accessible through:
+   - `snap run --shell chromium -c 'tail -n 120 /tmp/surf-host-go.log'`
+
+What didn't work:
+1. Host logs were initially "missing" from `/tmp` in the normal shell.
+   - Root cause: Snap uses a private `/tmp`, so the log file only existed inside the Chromium snap namespace.
+2. Model-list parsing initially regressed to UI labels such as:
+   - `AutoDecides how long to think`
+   - `InstantAnswers right away`
+   instead of canonical IDs.
+   - Root cause: dropdown parsing used visible labels without restoring canonical `gpt-5-2-*` extraction.
+3. Legacy submenu enumeration initially failed because submenu items were portal-rendered outside the first menu container.
+
+Outcome:
+1. Go-host runtime under Snap Chromium is now confirmed and observable in the service worker.
+2. ChatGPT provider response polling now finds rendered assistant content instead of timing out on `len=0`.
+3. The remaining operational issue after this entry was local `Ctrl-C` cancellation, which is recorded separately in the rollout ticket.
