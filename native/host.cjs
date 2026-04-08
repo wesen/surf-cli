@@ -1706,7 +1706,7 @@ const server = net.createServer((socket) => {
 server.listen(SOCKET_PATH, () => {
   log("Socket server listening on " + SOCKET_PATH);
   if (!IS_WIN) { try { fs.chmodSync(SOCKET_PATH, 0o600); } catch {} }
-  writeMessage({ type: "HOST_READY" });
+  writeMessage({ type: "HOST_READY", runtime: "node-host", socketPath: SOCKET_PATH });
   log("Sent HOST_READY to extension");
 });
 

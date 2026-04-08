@@ -93,7 +93,11 @@ func run(logger *log.Logger) error {
 		readErrCh <- h.readNativeLoop(ctx)
 	}()
 
-	if err := h.writeNative(map[string]any{"type": "HOST_READY"}); err != nil {
+	if err := h.writeNative(map[string]any{
+		"type":       "HOST_READY",
+		"runtime":    "go-host",
+		"socketPath": listener.Endpoint(),
+	}); err != nil {
 		return err
 	}
 	logger.Printf("Host initialization complete, waiting for connections...")

@@ -158,7 +158,10 @@ function connect(): void {
       debugLog("Received from native host:", msg.type || msg.id);
 
       if (msg.type === "HOST_READY") {
-        debugLog("Native host ready");
+        debugLog("Native host ready:", {
+          runtime: msg.runtime || "unknown",
+          socketPath: msg.socketPath || null,
+        });
         return;
       }
 
