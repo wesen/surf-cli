@@ -7,6 +7,42 @@ let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingNativeRequests = new Map<number, { resolve: (value: any) => void; reject: (err: Error) => void }>();
 let nativeRequestId = 0;
 
+function classifyChatGPTEvaluate(expression: string | undefined): string {
+  const expr = expression || "";
+  if (expr.includes("document.readyState")) return "ready-state";
+  if (expr.includes("document.title.toLowerCase")) return "title";
+  if (expr.includes("backend-api/me")) return "login-status";
+  if (expr.includes("challenge-platform")) return "cloudflare-check";
+  if (expr.includes("lastAssistantTurn")) return "response-poll";
+  if (expr.includes("text.trim().length > 0")) return "prompt-verify";
+  if (expr.includes("!node.hasAttribute('disabled')")) return "prompt-ready";
+  if (expr.includes("return 'clicked'")) return "send-click";
+  if (expr.includes("model-switcher-dropdown-button")) return "model-menu";
+  if (expr.includes("data-surf-file-input-id")) return "file-input";
+  return "other";
+}
+
+function extractChatGPTEvaluateDetails(result: any): Record<string, any> | null {
+  const innerResult = result?.result;
+  const innerValue = innerResult?.value;
+  if (!innerValue || typeof innerValue !== "object") {
+    return null;
+  }
+  const details: Record<string, any> = {};
+  if (typeof innerValue.text === "string") {
+    details.textLength = innerValue.text.length;
+    details.textPreview = innerValue.text.slice(0, 120);
+  }
+  if ("stopVisible" in innerValue) details.stopVisible = innerValue.stopVisible;
+  if ("finished" in innerValue) details.finished = innerValue.finished;
+  if ("messageId" in innerValue) details.messageId = innerValue.messageId;
+  if ("turnIndex" in innerValue) details.turnIndex = innerValue.turnIndex;
+  if ("status" in innerValue) details.status = innerValue.status;
+  if ("hasLoginCta" in innerValue) details.hasLoginCta = innerValue.hasLoginCta;
+  if (Object.keys(details).length === 0) return null;
+  return details;
+}
+
 function summarizeNativePayload(value: any): any {
   if (value == null) return value;
   if (Array.isArray(value)) {
@@ -146,6 +182,7 @@ function connect(): void {
         id: msg.id,
         type: msg.type,
         tabId: msg.tabId,
+        evaluateKind: msg.type === "CHATGPT_EVALUATE" ? classifyChatGPTEvaluate(msg.expression) : undefined,
       });
 
       try {
@@ -156,6 +193,13 @@ function connect(): void {
           tookMs: Date.now() - startedAt,
           result: summarizeNativePayload(result),
         });
+        if (msg.type === "CHATGPT_EVALUATE") {
+          debugLog("CHATGPT_EVALUATE details:", {
+            id: msg.id,
+            kind: classifyChatGPTEvaluate(msg.expression),
+            details: extractChatGPTEvaluateDetails(result),
+          });
+        }
         if (!nativePort) {
           debugLog("Cannot send response - native host disconnected:", msg.id);
           return;
