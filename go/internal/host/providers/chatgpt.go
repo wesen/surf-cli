@@ -863,26 +863,50 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	lastLoggedState := ""
 	expr := `(() => {
 	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
+	  const assistantNodes = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], [data-turn="assistant"]'));
 	  let lastAssistantTurn = null;
-	  for (let i = turns.length - 1; i >= 0; i--) {
-	    const node = turns[i];
-	    const role = (node.getAttribute('data-message-author-role') || '').toLowerCase();
-	    const turn = (node.getAttribute('data-turn') || '').toLowerCase();
-	    if (role === 'assistant' || turn === 'assistant' || node.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]')) {
-	      lastAssistantTurn = node;
-	      break;
+	  let messageRoot = null;
+	  if (assistantNodes.length > 0) {
+	    messageRoot = assistantNodes[assistantNodes.length - 1];
+	    lastAssistantTurn = messageRoot.closest('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]') || messageRoot;
+	  } else {
+	    for (let i = turns.length - 1; i >= 0; i--) {
+	      const node = turns[i];
+	      const role = (node.getAttribute('data-message-author-role') || '').toLowerCase();
+	      const turn = (node.getAttribute('data-turn') || '').toLowerCase();
+	      if (role === 'assistant' || turn === 'assistant' || node.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]')) {
+	        lastAssistantTurn = node;
+	        break;
+	      }
+	    }
+	    if (lastAssistantTurn) {
+	      messageRoot = lastAssistantTurn.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]') || lastAssistantTurn;
 	    }
 	  }
-	  if (!lastAssistantTurn) {
-	    return { text: '', stopVisible: Boolean(document.querySelector('[data-testid="stop-button"]')), finished: false };
+	  if (!lastAssistantTurn || !messageRoot) {
+	    return {
+	      text: '',
+	      stopVisible: Boolean(document.querySelector('[data-testid="stop-button"]')),
+	      finished: false,
+	      assistantCount: assistantNodes.length,
+	      turnCount: turns.length,
+	      foundAssistant: false,
+	    };
 	  }
-	  const messageRoot = lastAssistantTurn.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]') || lastAssistantTurn;
 	  const contentRoot = messageRoot.querySelector('.markdown') || messageRoot.querySelector('[data-message-content]') || messageRoot.querySelector('.prose') || messageRoot;
 	  const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
 	  const stopVisible = Boolean(document.querySelector('[data-testid="stop-button"]'));
 	  const finished = Boolean(lastAssistantTurn.querySelector('button[data-testid="copy-turn-action-button"], button[data-testid="good-response-turn-action-button"]'));
 	  const messageId = messageRoot.getAttribute('data-message-id') || null;
-	  return { text, stopVisible, finished, messageId };
+	  return {
+	    text,
+	    stopVisible,
+	    finished,
+	    messageId,
+	    assistantCount: assistantNodes.length,
+	    turnCount: turns.length,
+	    foundAssistant: true,
+	  };
 	})()`
 
 	for time.Now().Before(deadline) {
@@ -902,7 +926,19 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 			stableCycles++
 		}
 		stableEnough := stableCycles >= requiredStableCycles && time.Since(lastChangeAt) >= minStable
-		state := fmt.Sprintf("len=%d stop=%v finished=%v stableCycles=%d stableEnough=%v", currentLength, asBool(m["stopVisible"]), asBool(m["finished"]), stableCycles, stableEnough)
+		assistantCount, _ := toInt64(m["assistantCount"])
+		turnCount, _ := toInt64(m["turnCount"])
+		state := fmt.Sprintf(
+			"len=%d stop=%v finished=%v stableCycles=%d stableEnough=%v foundAssistant=%v assistantCount=%d turnCount=%d",
+			currentLength,
+			asBool(m["stopVisible"]),
+			asBool(m["finished"]),
+			stableCycles,
+			stableEnough,
+			asBool(m["foundAssistant"]),
+			assistantCount,
+			turnCount,
+		)
 		if b.logf != nil && (state != lastLoggedState || polls == 1 || polls%25 == 0) {
 			lastLoggedState = state
 			b.logf("[chatgpt] waitForResponse poll=%d %s", polls, state)
