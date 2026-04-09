@@ -1,0 +1,11 @@
+# Changelog
+
+## 2026-04-08
+
+- Initial workspace created.
+- Added detailed architecture/design/implementation guide for non-provider surf-go parity.
+- Added investigation diary documenting ticket setup and evidence collection.
+- Added phased task backlog for parity implementation.
+- Generated machine-readable Node-vs-Go non-provider command-gap inventory.
+- Tightened the design doc so every new public `surf-go` verb in this effort is explicitly required to be a Glazed command.
+- Replaced the coarse phase backlog with a detailed Glazed command implementation checklist.

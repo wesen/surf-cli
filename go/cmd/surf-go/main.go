@@ -61,6 +61,16 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	rootCmd.AddCommand(cobraNavigate)
 
+	jsCmd, err := commands.NewJSCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraJS, err := buildGlazedCommand(jsCmd)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraJS)
+
 	if err := addPageAndInputCommands(rootCmd); err != nil {
 		return nil, err
 	}

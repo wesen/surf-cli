@@ -27,6 +27,10 @@ topics:
       description: ChatGPT provider integration and compatibility topics
     - slug: providers
       description: Cross-provider architecture and compatibility topics
+    - slug: cli
+      description: Command-line interface design and usage
+    - slug: onboarding
+      description: Onboarding-oriented architecture and implementation guidance for new engineers
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes

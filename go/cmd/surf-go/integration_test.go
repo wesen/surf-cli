@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -131,5 +133,76 @@ func TestSurfGoDefaultOutputFormatIsYAML(t *testing.T) {
 	}
 	if flag.DefValue != "yaml" {
 		t.Fatalf("expected default output format yaml, got %q", flag.DefValue)
+	}
+}
+
+func TestSurfGoJSCommandUsesFileInputAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	scriptPath := filepath.Join(t.TempDir(), "script.js")
+	if err := os.WriteFile(scriptPath, []byte("return document.title"), 0o644); err != nil {
+		t.Fatalf("write script failed: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+		var req map[string]any
+		if err := json.Unmarshal(line, &req); err != nil {
+			done <- err
+			return
+		}
+		params := req["params"].(map[string]any)
+		if params["tool"] != "js" {
+			done <- fmt.Errorf("unexpected tool: %v", params["tool"])
+			return
+		}
+		args := params["args"].(map[string]any)
+		if args["code"] != "return document.title" {
+			done <- fmt.Errorf("unexpected code payload: %v", args["code"])
+			return
+		}
+		resp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "ok"}},
+			},
+		}
+		b, _ := json.Marshal(resp)
+		_, err = conn.Write(append(b, '\n'))
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"js", "--file", scriptPath, "--socket-path", sock, "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
 	}
 }
