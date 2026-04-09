@@ -274,3 +274,51 @@ const expression = "(async () => {\\n'use strict';\\n" + message.code + "\\n})()
 - parser result: `parse ok`
 
 This established that the previous syntax failure was caused by the wrapper mangling the user script, not by the core Activity extraction logic.
+
+## Step 9: Implement `surf-go chatgpt-transcript`
+
+With the DOM transcript extractor and Activity flyout probes validated, I turned the flow into a first-class Go command rather than leaving it as ad hoc `js --file ...` invocations.
+
+### Command shape
+
+- command: `surf-go chatgpt-transcript`
+- flags:
+  - `--with-activity`
+  - `--activity-limit`
+  - standard socket / tab / window / debug flags
+
+### Implementation approach
+
+- embedded the browser-side extraction script in the Go command package
+- prepended a `SURF_OPTIONS` object before sending the script through the existing `js` tool
+- expanded the returned `transcript` array into one Glazed row per turn
+- copied the browser script into the ticket `scripts/` directory as:
+  - `scripts/chatgpt_transcript_export_with_activity.js`
+
+### Browser-side behavior
+
+The embedded script:
+
+1. walks `section[data-testid^="conversation-turn-"]` in DOM order
+2. chooses one canonical message per section by selecting the longest non-empty `[data-message-author-role]` payload
+3. records:
+   - role
+   - model
+   - message ID
+   - text
+   - thought button metadata when present
+4. if `--with-activity` is enabled:
+   - opens the thought button
+   - waits for a matching Activity flyout
+   - extracts the full flyout text
+   - attaches it back to the assistant turn row
+
+### Validation status
+
+- focused Go tests passed for:
+  - command code generation
+  - transcript response row expansion
+  - root command mock-host integration
+- a live CLI run without Activity succeeded against the real ChatGPT tab and produced six structured transcript rows
+
+The `--with-activity` path is implemented, but the end-to-end validation for that mode still needs a real-shell run outside the agent wrapper, because the wrapper environment has previously produced misleading hangs even when direct shell runs worked correctly.

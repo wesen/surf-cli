@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,6 +199,74 @@ func TestSurfGoJSCommandUsesFileInputAgainstMockHost(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"js", "--file", scriptPath, "--socket-path", sock, "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
+
+func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+		var req map[string]any
+		if err := json.Unmarshal(line, &req); err != nil {
+			done <- err
+			return
+		}
+		params := req["params"].(map[string]any)
+		if params["tool"] != "js" {
+			done <- fmt.Errorf("unexpected tool: %v", params["tool"])
+			return
+		}
+		args := params["args"].(map[string]any)
+		code, _ := args["code"].(string)
+		if !strings.Contains(code, `const SURF_OPTIONS = {"withActivity":true,"activityLimit":3};`) &&
+			!strings.Contains(code, `const SURF_OPTIONS = {"activityLimit":3,"withActivity":true};`) {
+			done <- fmt.Errorf("missing transcript options prelude: %q", code)
+			return
+		}
+		resp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": `{"href":"https://chatgpt.com/c/abc","title":"Conversation","turnCount":1,"withActivity":true,"activityLimit":3,"activityExported":1,"transcript":[{"index":0,"role":"assistant","text":"hello","activityFound":true,"activityText":"thoughts"}]}`}},
+			},
+		}
+		b, _ := json.Marshal(resp)
+		_, err = conn.Write(append(b, '\n'))
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"chatgpt-transcript", "--with-activity", "--activity-limit", "3", "--socket-path", sock, "--output", "json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("command failed: %v", err)
 	}

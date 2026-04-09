@@ -41,6 +41,16 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	rootCmd.AddCommand(cobraChatGPT)
 
+	chatGPTTranscriptCmd, err := commands.NewChatGPTTranscriptCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraChatGPTTranscript, err := buildGlazedCommand(chatGPTTranscriptCmd)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraChatGPTTranscript)
+
 	rawCmd, err := commands.NewToolRawCommand()
 	if err != nil {
 		return nil, err
