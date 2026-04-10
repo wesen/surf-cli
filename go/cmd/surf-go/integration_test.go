@@ -276,7 +276,7 @@ func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
 	}
 }
 
-func TestSurfGoKagiSearchCommandNavigatesThenUsesJSAgainstMockHost(t *testing.T) {
+func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "surf.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -312,7 +312,7 @@ func TestSurfGoKagiSearchCommandNavigatesThenUsesJSAgainstMockHost(t *testing.T)
 
 			switch i {
 			case 0:
-				if params["tool"] != "navigate" {
+				if params["tool"] != "tab.new" {
 					_ = conn.Close()
 					done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
 					return
@@ -320,14 +320,14 @@ func TestSurfGoKagiSearchCommandNavigatesThenUsesJSAgainstMockHost(t *testing.T)
 				args := params["args"].(map[string]any)
 				if args["url"] != "https://kagi.com/search?q=llm+transcript+attribution" {
 					_ = conn.Close()
-					done <- fmt.Errorf("unexpected navigate url: %v", args["url"])
+					done <- fmt.Errorf("unexpected tab.new url: %v", args["url"])
 					return
 				}
 				resp := map[string]any{
 					"type": "tool_response",
 					"id":   req["id"],
 					"result": map[string]any{
-						"content": []map[string]any{{"type": "text", "text": `{"ok":true}`}},
+						"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":77,"url":"https://kagi.com/search?q=llm+transcript+attribution"}`}},
 					},
 				}
 				b, _ := json.Marshal(resp)

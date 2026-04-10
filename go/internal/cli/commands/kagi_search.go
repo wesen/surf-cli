@@ -136,6 +136,7 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (*kagiSearchDat
 		return nil, fmt.Errorf("--query is required")
 	}
 
+	searchURL := buildKagiSearchURL(s.Query)
 	code, err := buildKagiSearchCode(s)
 	if err != nil {
 		return nil, err
@@ -153,8 +154,20 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (*kagiSearchDat
 		windowID = &s.WindowID
 	}
 
-	if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": buildKagiSearchURL(s.Query)}, tabID, windowID); err != nil {
-		return nil, err
+	if tabID == nil && windowID == nil {
+		tabResp, err := ExecuteTool(ctx, client, "tab.new", map[string]any{"url": searchURL}, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		resolvedTabID, err := extractTabIDFromResponse(tabResp)
+		if err != nil {
+			return nil, err
+		}
+		tabID = &resolvedTabID
+	} else {
+		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": searchURL}, tabID, windowID); err != nil {
+			return nil, err
+		}
 	}
 
 	resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": code}, tabID, windowID)
@@ -292,4 +305,29 @@ func renderKagiSearchMarkdown(data map[string]any) string {
 	}
 
 	return b.String()
+}
+
+func extractTabIDFromResponse(resp map[string]any) (int64, error) {
+	if e := extractErrorText(resp); e != "" {
+		return 0, fmt.Errorf("%s", e)
+	}
+	parsed := parseResult(resp)
+	dataMap, ok := parsed.Data.(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("missing structured tab creation response")
+	}
+	rawID, ok := dataMap["tabId"]
+	if !ok {
+		return 0, fmt.Errorf("missing tabId in tab creation response")
+	}
+	switch v := rawID.(type) {
+	case float64:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	default:
+		return 0, fmt.Errorf("unexpected tabId type %T", rawID)
+	}
 }

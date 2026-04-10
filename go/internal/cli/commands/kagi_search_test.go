@@ -73,3 +73,19 @@ func TestRenderKagiSearchMarkdown(t *testing.T) {
 		t.Fatalf("unexpected markdown render: %s", text)
 	}
 }
+
+func TestExtractTabIDFromResponse(t *testing.T) {
+	resp := map[string]any{
+		"type": "tool_response",
+		"result": map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": `{"success":true,"tabId":42,"url":"https://kagi.com/"}`}},
+		},
+	}
+	tabID, err := extractTabIDFromResponse(resp)
+	if err != nil {
+		t.Fatalf("extractTabIDFromResponse returned error: %v", err)
+	}
+	if tabID != 42 {
+		t.Fatalf("unexpected tab id: %d", tabID)
+	}
+}
