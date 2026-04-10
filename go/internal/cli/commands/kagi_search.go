@@ -34,6 +34,7 @@ var _ cmds.WriterCommand = (*KagiSearchCommand)(nil)
 type KagiSearchSettings struct {
 	Query       string `glazed:"query"`
 	MaxResults  int    `glazed:"max-results"`
+	KeepTabOpen bool   `glazed:"keep-tab-open"`
 	Socket      string `glazed:"socket-path"`
 	TimeoutMS   int    `glazed:"timeout-ms"`
 	TabID       int64  `glazed:"tab-id"`
@@ -62,6 +63,7 @@ func NewKagiSearchCommand() (*KagiSearchCommand, error) {
 		cmds.WithFlags(
 			fields.New("query", fields.TypeString, fields.WithRequired(true), fields.WithHelp("Search query to run on Kagi")),
 			fields.New("max-results", fields.TypeInteger, fields.WithDefault(10), fields.WithHelp("Maximum number of result rows to extract; 0 means all discovered results")),
+			fields.New("keep-tab-open", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Keep a newly created search tab open instead of closing it when the command finishes")),
 			fields.New("socket-path", fields.TypeString, fields.WithDefault(config.CurrentSocketPath()), fields.WithHelp("Host socket path")),
 			fields.New("timeout-ms", fields.TypeInteger, fields.WithDefault(120000), fields.WithHelp("Socket request timeout in milliseconds")),
 			fields.New("tab-id", fields.TypeInteger, fields.WithDefault(int64(-1)), fields.WithHelp("Optional tab id override")),
@@ -131,7 +133,7 @@ func (c *KagiSearchCommand) RunIntoWriter(
 	return err
 }
 
-func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (*kagiSearchData, error) {
+func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (data *kagiSearchData, retErr error) {
 	if strings.TrimSpace(s.Query) == "" {
 		return nil, fmt.Errorf("--query is required")
 	}
@@ -146,6 +148,7 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (*kagiSearchDat
 	client.Debug = s.DebugSocket
 
 	var tabID *int64
+	var ownedTabID *int64
 	if s.TabID >= 0 {
 		tabID = &s.TabID
 	}
@@ -164,11 +167,21 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (*kagiSearchDat
 			return nil, err
 		}
 		tabID = &resolvedTabID
+		ownedTabID = &resolvedTabID
 	} else {
 		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": searchURL}, tabID, windowID); err != nil {
 			return nil, err
 		}
 	}
+
+	defer func() {
+		if retErr != nil || s.KeepTabOpen {
+			return
+		}
+		if err := closeOwnedTab(ctx, client, ownedTabID); err != nil {
+			retErr = err
+		}
+	}()
 
 	resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": code}, tabID, windowID)
 	if err != nil {
@@ -330,4 +343,12 @@ func extractTabIDFromResponse(resp map[string]any) (int64, error) {
 	default:
 		return 0, fmt.Errorf("unexpected tabId type %T", rawID)
 	}
+}
+
+func closeOwnedTab(ctx context.Context, client *transport.Client, tabID *int64) error {
+	if tabID == nil {
+		return nil
+	}
+	_, err := ExecuteTool(ctx, client, "tab.close", map[string]any{"id": *tabID}, nil, nil)
+	return err
 }

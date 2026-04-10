@@ -48,6 +48,7 @@ type KagiAssistantSettings struct {
 	ListTags             bool   `glazed:"list-tags"`
 	ListAllOptions       bool   `glazed:"list-all-options"`
 	PromptTimeoutSec     int    `glazed:"prompt-timeout-sec"`
+	KeepTabOpen          bool   `glazed:"keep-tab-open"`
 	Socket               string `glazed:"socket-path"`
 	TimeoutMS            int    `glazed:"timeout-ms"`
 	TabID                int64  `glazed:"tab-id"`
@@ -87,6 +88,7 @@ func NewKagiAssistantCommand() (*KagiAssistantCommand, error) {
 			fields.New("list-tags", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("List available conversation tags")),
 			fields.New("list-all-options", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("List assistants, custom assistants, models, and lenses together")),
 			fields.New("prompt-timeout-sec", fields.TypeInteger, fields.WithDefault(120), fields.WithHelp("Maximum time to wait for the assistant response in seconds")),
+			fields.New("keep-tab-open", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Keep a newly created assistant tab open instead of closing it when the command finishes")),
 			fields.New("socket-path", fields.TypeString, fields.WithDefault(config.CurrentSocketPath()), fields.WithHelp("Host socket path")),
 			fields.New("timeout-ms", fields.TypeInteger, fields.WithDefault(30000), fields.WithHelp("Socket request timeout in milliseconds")),
 			fields.New("tab-id", fields.TypeInteger, fields.WithDefault(int64(-1)), fields.WithHelp("Optional tab id override for the assistant page")),
@@ -186,7 +188,7 @@ func buildKagiAssistantCode(s *KagiAssistantSettings) (string, error) {
 	return fmt.Sprintf("const SURF_OPTIONS = %s;\n%s", string(b), kagiAssistantScript), nil
 }
 
-func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (*kagiAssistantData, error) {
+func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (data *kagiAssistantData, retErr error) {
 	if err := validateKagiAssistantSettings(s); err != nil {
 		return nil, err
 	}
@@ -207,6 +209,7 @@ func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (*kagiAss
 	client.Debug = s.DebugSocket
 
 	var tabID *int64
+	var ownedTabID *int64
 	if s.TabID >= 0 {
 		tabID = &s.TabID
 	}
@@ -225,11 +228,21 @@ func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (*kagiAss
 			return nil, err
 		}
 		tabID = &resolvedTabID
+		ownedTabID = &resolvedTabID
 	} else {
 		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": kagiAssistantURL}, tabID, windowID); err != nil {
 			return nil, err
 		}
 	}
+
+	defer func() {
+		if retErr != nil || s.KeepTabOpen {
+			return
+		}
+		if err := closeOwnedTab(ctx, client, ownedTabID); err != nil {
+			retErr = err
+		}
+	}()
 
 	time.Sleep(1200 * time.Millisecond)
 

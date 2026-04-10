@@ -218,80 +218,99 @@ func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		conn, err := ln.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		reader := bufio.NewReader(conn)
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			_ = conn.Close()
-			done <- err
-			return
-		}
-		var req map[string]any
-		if err := json.Unmarshal(line, &req); err != nil {
-			_ = conn.Close()
-			done <- err
-			return
-		}
-		params := req["params"].(map[string]any)
-		if params["tool"] != "tab.new" {
-			_ = conn.Close()
-			done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
-			return
-		}
-		firstResp := map[string]any{
-			"type": "tool_response",
-			"id":   req["id"],
-			"result": map[string]any{
-				"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":42,"url":"https://kagi.com/assistant"}`}},
-			},
-		}
-		b, _ := json.Marshal(firstResp)
-		_, _ = conn.Write(append(b, '\n'))
-		_ = conn.Close()
+		defer close(done)
+		for i := 0; i < 3; i++ {
+			conn, err := ln.Accept()
+			if err != nil {
+				done <- err
+				return
+			}
 
-		conn, err = ln.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		defer conn.Close()
-		reader = bufio.NewReader(conn)
-		line, err = reader.ReadBytes('\n')
-		if err != nil {
-			done <- err
-			return
-		}
-		if err := json.Unmarshal(line, &req); err != nil {
-			done <- err
-			return
-		}
-		params = req["params"].(map[string]any)
-		if params["tool"] != "js" {
-			done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
-			return
-		}
-		args := params["args"].(map[string]any)
-		code, _ := args["code"].(string)
-		for _, needle := range []string{`"assistant":"Quick"`, `"tags":["Temporary","photo"]`, `"createTags":true`} {
-			if !strings.Contains(code, needle) {
-				done <- fmt.Errorf("missing %s in generated kagi-assistant code", needle)
+			reader := bufio.NewReader(conn)
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			var req map[string]any
+			if err := json.Unmarshal(line, &req); err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			params := req["params"].(map[string]any)
+
+			switch i {
+			case 0:
+				if params["tool"] != "tab.new" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
+					return
+				}
+				firstResp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":42,"url":"https://kagi.com/assistant"}`}},
+					},
+				}
+				b, _ := json.Marshal(firstResp)
+				_, err = conn.Write(append(b, '\n'))
+			case 1:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
+				for _, needle := range []string{`"assistant":"Quick"`, `"tags":["Temporary","photo"]`, `"createTags":true`} {
+					if !strings.Contains(code, needle) {
+						_ = conn.Close()
+						done <- fmt.Errorf("missing %s in generated kagi-assistant code", needle)
+						return
+					}
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"kind":"response","href":"https://kagi.com/assistant/abc","prompt":"hello","response":"world","tagSelection":{"visibleTags":["Temporary","photo"]}}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "tab.close" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				if id, ok := args["id"].(float64); !ok || int64(id) != 42 {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected close tab id: %#v", args["id"])
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":42}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			}
+
+			_ = conn.Close()
+			if err != nil {
+				done <- err
 				return
 			}
 		}
-		resp := map[string]any{
-			"type": "tool_response",
-			"id":   req["id"],
-			"result": map[string]any{
-				"content": []map[string]any{{"type": "text", "text": `{"kind":"response","href":"https://kagi.com/assistant/abc","prompt":"hello","response":"world","tagSelection":{"visibleTags":["Temporary","photo"]}}`}},
-			},
-		}
-		b, _ = json.Marshal(resp)
-		_, err = conn.Write(append(b, '\n'))
-		done <- err
+		done <- nil
 	}()
 
 	root, err := newRootCommand(help.NewHelpSystem())
@@ -389,7 +408,7 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		for i := 0; i < 2; i++ {
+		for i := 0; i < 3; i++ {
 			conn, err := ln.Accept()
 			if err != nil {
 				done <- err
@@ -452,6 +471,27 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 					"id":   req["id"],
 					"result": map[string]any{
 						"content": []map[string]any{{"type": "text", "text": `{"query":"llm transcript attribution","href":"https://kagi.com/search?q=llm+transcript+attribution","title":"llm transcript attribution - Kagi Search","waitedMs":500,"maxResults":3,"resultCount":1,"results":[{"index":1,"title":"Paper A","url":"https://example.com/a","snippet":"Snippet A"}]}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "tab.close" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				if id, ok := args["id"].(float64); !ok || int64(id) != 77 {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected close tab id: %#v", args["id"])
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":77}`}},
 					},
 				}
 				b, _ := json.Marshal(resp)
