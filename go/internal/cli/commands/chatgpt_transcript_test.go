@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,6 +39,45 @@ func TestChatGPTTranscriptResponseToRowsExpandsTranscript(t *testing.T) {
 	}
 	if got, _ := rows[1].Get("activityText"); got != "thoughts" {
 		t.Fatalf("unexpected activity text: %#v", got)
+	}
+}
+
+func TestWriteChatGPTTranscriptExportMarkdown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript.md")
+	data := &chatGPTTranscriptData{Raw: map[string]any{
+		"href":             "https://chatgpt.com/c/abc",
+		"title":            "Conversation",
+		"withActivity":     true,
+		"activityExported": 1,
+		"transcript": []any{
+			map[string]any{"index": 0, "role": "assistant", "messageId": "m1", "model": "gpt-5", "text": "hello", "thoughtButtonText": "Thought for 5s", "activityText": "reasoning"},
+		},
+	}}
+	if err := writeChatGPTTranscriptExport(path, "markdown", data); err != nil {
+		t.Fatalf("writeChatGPTTranscriptExport returned error: %v", err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read markdown export: %v", err)
+	}
+	text := string(b)
+	if !strings.Contains(text, "# Conversation") || !strings.Contains(text, "### Activity") {
+		t.Fatalf("unexpected markdown export: %s", text)
+	}
+}
+
+func TestWriteChatGPTTranscriptExportJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript.json")
+	data := &chatGPTTranscriptData{Raw: map[string]any{"href": "https://chatgpt.com/c/abc", "transcript": []any{}}}
+	if err := writeChatGPTTranscriptExport(path, "json", data); err != nil {
+		t.Fatalf("writeChatGPTTranscriptExport returned error: %v", err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read json export: %v", err)
+	}
+	if !strings.Contains(string(b), `"href": "https://chatgpt.com/c/abc"`) {
+		t.Fatalf("unexpected json export: %s", string(b))
 	}
 }
 

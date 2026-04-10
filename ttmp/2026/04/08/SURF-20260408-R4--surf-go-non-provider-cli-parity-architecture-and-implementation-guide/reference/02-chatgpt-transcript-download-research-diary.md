@@ -322,3 +322,36 @@ The embedded script:
 - a live CLI run without Activity succeeded against the real ChatGPT tab and produced six structured transcript rows
 
 The `--with-activity` path is implemented, but the end-to-end validation for that mode still needs a real-shell run outside the agent wrapper, because the wrapper environment has previously produced misleading hangs even when direct shell runs worked correctly.
+
+## Step 10: Add transcript artifact export
+
+The next refinement was to make `surf-go chatgpt-transcript` write a durable artifact in addition to emitting Glazed rows.
+
+### Added flags
+
+- `--export-file`
+- `--export-format markdown|json`
+
+The command still prints one structured row per turn to stdout, but it can now also write:
+
+- Markdown transcript documents for human review
+- JSON dumps of the full structured payload for downstream processing
+
+### Important Glazed integration note
+
+I first tried to use `--output-file`, but that collided with Glazed's own output flags during Cobra command construction. The fix was to use a command-specific flag name:
+
+- `--export-file`
+
+That avoids namespace conflicts with the Glazed output system while still making the feature explicit.
+
+### Validation
+
+- focused Go tests cover:
+  - embedded script prelude generation
+  - transcript row expansion
+  - Markdown export rendering
+  - JSON export rendering
+- `go test ./internal/cli/commands ./cmd/surf-go` passed
+
+The final live browser validation of the export path was blocked in this session because the native host socket was not running at the time of the check (`.../surf.sock` missing), so the real-shell verification step still needs to be rerun with the extension/native host active.
