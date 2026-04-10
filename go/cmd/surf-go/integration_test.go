@@ -208,6 +208,108 @@ func TestSurfGoJSCommandUsesFileInputAgainstMockHost(t *testing.T) {
 	}
 }
 
+func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			_ = conn.Close()
+			done <- err
+			return
+		}
+		var req map[string]any
+		if err := json.Unmarshal(line, &req); err != nil {
+			_ = conn.Close()
+			done <- err
+			return
+		}
+		params := req["params"].(map[string]any)
+		if params["tool"] != "tab.new" {
+			_ = conn.Close()
+			done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
+			return
+		}
+		firstResp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":42,"url":"https://kagi.com/assistant"}`}},
+			},
+		}
+		b, _ := json.Marshal(firstResp)
+		_, _ = conn.Write(append(b, '\n'))
+		_ = conn.Close()
+
+		conn, err = ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+		reader = bufio.NewReader(conn)
+		line, err = reader.ReadBytes('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+		if err := json.Unmarshal(line, &req); err != nil {
+			done <- err
+			return
+		}
+		params = req["params"].(map[string]any)
+		if params["tool"] != "js" {
+			done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
+			return
+		}
+		args := params["args"].(map[string]any)
+		code, _ := args["code"].(string)
+		for _, needle := range []string{`"assistant":"Quick"`, `"tags":["Temporary","photo"]`, `"createTags":true`} {
+			if !strings.Contains(code, needle) {
+				done <- fmt.Errorf("missing %s in generated kagi-assistant code", needle)
+				return
+			}
+		}
+		resp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": `{"kind":"response","href":"https://kagi.com/assistant/abc","prompt":"hello","response":"world","tagSelection":{"visibleTags":["Temporary","photo"]}}`}},
+			},
+		}
+		b, _ = json.Marshal(resp)
+		_, err = conn.Write(append(b, '\n'))
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"kagi-assistant", "hello", "--assistant", "Quick", "--tags", "Temporary,photo", "--create-tags", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
+
 func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "surf.sock")
 	ln, err := net.Listen("unix", sock)

@@ -79,6 +79,23 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	rootCmd.AddCommand(cobraKagiSearch)
 
+	kagiAssistantCmd, err := commands.NewKagiAssistantCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraKagiAssistant, err := cli.BuildCobraCommand(kagiAssistantCmd,
+		cli.WithDualMode(true),
+		cli.WithGlazeToggleFlag("with-glaze-output"),
+		cli.WithParserConfig(cli.CobraParserConfig{
+			ShortHelpSections: []string{schema.DefaultSlug},
+			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraKagiAssistant)
+
 	rawCmd, err := commands.NewToolRawCommand()
 	if err != nil {
 		return nil, err
