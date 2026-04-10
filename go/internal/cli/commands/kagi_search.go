@@ -158,11 +158,9 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (data *kagiSear
 	}
 
 	if tabID == nil && windowID == nil {
-		tabResp, err := ExecuteTool(ctx, client, "tab.new", map[string]any{"url": searchURL}, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		resolvedTabID, err := extractTabIDFromResponse(tabResp)
+		resolvedTabID, err := openOwnedTab(ctx, client, searchURL, tabReadyOptions{
+			URLExact: searchURL,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -171,6 +169,11 @@ func fetchKagiSearch(ctx context.Context, s *KagiSearchSettings) (data *kagiSear
 	} else {
 		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": searchURL}, tabID, windowID); err != nil {
 			return nil, err
+		}
+		if tabID != nil {
+			if err := waitForTabReady(ctx, client, *tabID, tabReadyOptions{URLExact: searchURL}); err != nil {
+				return nil, err
+			}
 		}
 	}
 

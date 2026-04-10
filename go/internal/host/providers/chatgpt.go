@@ -862,65 +862,79 @@ func (b *chatGPTBridge) waitForResponse(ctx context.Context, timeout time.Durati
 	polls := 0
 	lastLoggedState := ""
 	expr := `(() => {
-	  const turns = Array.from(document.querySelectorAll('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
-	  const assistantNodes = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], [data-turn="assistant"]'));
-	  const assistantSummaries = assistantNodes.slice(-3).map((node, idx) => {
-	    const contentRoot =
-	      node.querySelector('.markdown') ||
-	      node.querySelector('[data-message-content]') ||
-	      node.querySelector('.prose') ||
-	      node;
-	    const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
-	    return {
-	      indexFromEnd: assistantNodes.length - Math.min(assistantNodes.length, 3) + idx,
-	      textLength: text.length,
-	      textPreview: text.slice(0, 120),
-	      hasMarkdown: Boolean(node.querySelector('.markdown')),
-	      hasProse: Boolean(node.querySelector('.prose')),
-	      messageId: node.getAttribute('data-message-id') || null,
-	    };
-	  });
-	  let lastAssistantTurn = null;
-	  let messageRoot = null;
-	  if (assistantNodes.length > 0) {
-	    messageRoot = assistantNodes[assistantNodes.length - 1];
-	    lastAssistantTurn = messageRoot.closest('article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]') || messageRoot;
-	  } else {
-	    for (let i = turns.length - 1; i >= 0; i--) {
-	      const node = turns[i];
-	      const role = (node.getAttribute('data-message-author-role') || '').toLowerCase();
-	      const turn = (node.getAttribute('data-turn') || '').toLowerCase();
-	      if (role === 'assistant' || turn === 'assistant' || node.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]')) {
-	        lastAssistantTurn = node;
-	        break;
+	  const turns = Array.from(document.querySelectorAll('section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn"], div[data-testid^="conversation-turn"]'));
+	  function extractBestAssistantFromTurn(turn) {
+	    const candidates = Array.from(turn.querySelectorAll('[data-message-author-role="assistant"], [data-turn="assistant"]'));
+	    if (candidates.length === 0) return null;
+	    const byMessageId = new Map();
+	    for (const node of candidates) {
+	      const messageId = node.getAttribute('data-message-id') || ('assistant:' + byMessageId.size);
+	      const contentRoot =
+	        node.querySelector('.markdown') ||
+	        node.querySelector('[data-message-content]') ||
+	        node.querySelector('.prose') ||
+	        node;
+	      const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
+	      if (!text) continue;
+	      const existing = byMessageId.get(messageId);
+	      const candidate = {
+	        node,
+	        messageId,
+	        text,
+	        textLength: text.length,
+	        hasMarkdown: Boolean(node.querySelector('.markdown')),
+	        hasProse: Boolean(node.querySelector('.prose')),
+	      };
+	      if (!existing || candidate.textLength > existing.textLength) {
+	        byMessageId.set(messageId, candidate);
 	      }
 	    }
-	    if (lastAssistantTurn) {
-	      messageRoot = lastAssistantTurn.querySelector('[data-message-author-role="assistant"], [data-turn="assistant"]') || lastAssistantTurn;
+	    const items = Array.from(byMessageId.values()).sort((a, b) => b.textLength - a.textLength);
+	    return items[0] || null;
+	  }
+	  const assistantSummaries = [];
+	  let lastAssistantTurn = null;
+	  let bestAssistant = null;
+	  for (let i = turns.length - 1; i >= 0; i -= 1) {
+	    const turn = turns[i];
+	    const best = extractBestAssistantFromTurn(turn);
+	    if (best) {
+	      if (!bestAssistant) {
+	        bestAssistant = best;
+	        lastAssistantTurn = turn;
+	      }
+	      if (assistantSummaries.length < 3) {
+	        assistantSummaries.push({
+	          indexFromEnd: assistantSummaries.length,
+	          textLength: best.textLength,
+	          textPreview: best.text.slice(0, 120),
+	          hasMarkdown: best.hasMarkdown,
+	          hasProse: best.hasProse,
+	          messageId: best.messageId,
+	        });
+	      }
 	    }
 	  }
-	  if (!lastAssistantTurn || !messageRoot) {
+	  if (!lastAssistantTurn || !bestAssistant) {
 	    return {
 	      text: '',
 	      stopVisible: Boolean(document.querySelector('[data-testid="stop-button"]')),
 	      finished: false,
-	      assistantCount: assistantNodes.length,
+	      assistantCount: assistantSummaries.length,
 	      turnCount: turns.length,
 	      foundAssistant: false,
 	      assistantSummaries,
 	    };
 	  }
-	  const contentRoot = messageRoot.querySelector('.markdown') || messageRoot.querySelector('[data-message-content]') || messageRoot.querySelector('.prose') || messageRoot;
-	  const text = (contentRoot?.innerText || contentRoot?.textContent || '').trim();
+	  const text = bestAssistant.text;
 	  const stopVisible = Boolean(document.querySelector('[data-testid="stop-button"]'));
 	  const finished = Boolean(lastAssistantTurn.querySelector('button[data-testid="copy-turn-action-button"], button[data-testid="good-response-turn-action-button"]'));
-	  const messageId = messageRoot.getAttribute('data-message-id') || null;
 	  return {
 	    text,
 	    stopVisible,
 	    finished,
-	    messageId,
-	    assistantCount: assistantNodes.length,
+	    messageId: bestAssistant.messageId,
+	    assistantCount: assistantSummaries.length,
 	    turnCount: turns.length,
 	    foundAssistant: true,
 	    assistantSummaries,

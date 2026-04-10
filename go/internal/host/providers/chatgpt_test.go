@@ -95,7 +95,7 @@ func TestHandleChatGPTToolSuccess(t *testing.T) {
 				return map[string]any{"result": map[string]any{"value": true}}, nil
 			case strings.Contains(expr, "return 'clicked'"):
 				return map[string]any{"result": map[string]any{"value": "clicked"}}, nil
-			case strings.Contains(expr, "lastAssistantTurn"):
+			case strings.Contains(expr, "extractBestAssistantFromTurn"):
 				polls++
 				return map[string]any{"result": map[string]any{"value": map[string]any{"text": "Hello from ChatGPT", "stopVisible": false, "finished": true}}}, nil
 			default:
@@ -165,7 +165,7 @@ func TestHandleChatGPTToolWithPageContext(t *testing.T) {
 				return map[string]any{"result": map[string]any{"value": true}}, nil
 			case strings.Contains(expr, "return 'clicked'"):
 				return map[string]any{"result": map[string]any{"value": "clicked"}}, nil
-			case strings.Contains(expr, "lastAssistantTurn"):
+			case strings.Contains(expr, "extractBestAssistantFromTurn"):
 				return map[string]any{"result": map[string]any{"value": map[string]any{"text": "ok", "stopVisible": false, "finished": true}}}, nil
 			default:
 				return map[string]any{"result": map[string]any{"value": true}}, nil
@@ -231,7 +231,7 @@ func TestHandleChatGPTToolWithFileUpload(t *testing.T) {
 				return map[string]any{"result": map[string]any{"value": true}}, nil
 			case strings.Contains(expr, "return 'clicked'"):
 				return map[string]any{"result": map[string]any{"value": "clicked"}}, nil
-			case strings.Contains(expr, "lastAssistantTurn"):
+			case strings.Contains(expr, "extractBestAssistantFromTurn"):
 				return map[string]any{"result": map[string]any{"value": map[string]any{"text": "ok", "stopVisible": false, "finished": true}}}, nil
 			default:
 				return map[string]any{"result": map[string]any{"value": true}}, nil

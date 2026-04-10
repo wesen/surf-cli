@@ -219,7 +219,7 @@ func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		for i := 0; i < 3; i++ {
+		for i := 0; i < 4; i++ {
 			conn, err := ln.Accept()
 			if err != nil {
 				done <- err
@@ -265,6 +265,28 @@ func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
 				}
 				args := params["args"].(map[string]any)
 				code, _ := args["code"].(string)
+				if !strings.Contains(code, "readyState") {
+					_ = conn.Close()
+					done <- fmt.Errorf("expected tab-ready probe, got: %q", code)
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"href":"https://kagi.com/assistant","title":"Kagi Assistant","readyState":"complete"}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
 				for _, needle := range []string{`"assistant":"Quick"`, `"tags":["Temporary","photo"]`, `"createTags":true`} {
 					if !strings.Contains(code, needle) {
 						_ = conn.Close()
@@ -281,10 +303,10 @@ func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
 				}
 				b, _ := json.Marshal(resp)
 				_, err = conn.Write(append(b, '\n'))
-			case 2:
+			case 3:
 				if params["tool"] != "tab.close" {
 					_ = conn.Close()
-					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					done <- fmt.Errorf("unexpected fourth tool: %v", params["tool"])
 					return
 				}
 				args := params["args"].(map[string]any)
@@ -408,7 +430,7 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		for i := 0; i < 3; i++ {
+		for i := 0; i < 4; i++ {
 			conn, err := ln.Accept()
 			if err != nil {
 				done <- err
@@ -461,6 +483,28 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 				}
 				args := params["args"].(map[string]any)
 				code, _ := args["code"].(string)
+				if !strings.Contains(code, "readyState") {
+					_ = conn.Close()
+					done <- fmt.Errorf("expected tab-ready probe, got: %q", code)
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"href":"https://kagi.com/search?q=llm+transcript+attribution","title":"llm transcript attribution - Kagi Search","readyState":"complete"}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
 				if !strings.Contains(code, `const SURF_OPTIONS = {"maxResults":3};`) {
 					_ = conn.Close()
 					done <- fmt.Errorf("missing kagi search options prelude: %q", code)
@@ -475,10 +519,10 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 				}
 				b, _ := json.Marshal(resp)
 				_, err = conn.Write(append(b, '\n'))
-			case 2:
+			case 3:
 				if params["tool"] != "tab.close" {
 					_ = conn.Close()
-					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					done <- fmt.Errorf("unexpected fourth tool: %v", params["tool"])
 					return
 				}
 				args := params["args"].(map[string]any)

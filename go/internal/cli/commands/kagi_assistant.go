@@ -219,11 +219,9 @@ func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (data *ka
 	}
 
 	if tabID == nil && windowID == nil {
-		tabResp, err := ExecuteTool(ctx, client, "tab.new", map[string]any{"url": kagiAssistantURL}, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		resolvedTabID, err := extractTabIDFromResponse(tabResp)
+		resolvedTabID, err := openOwnedTab(ctx, client, kagiAssistantURL, tabReadyOptions{
+			URLPrefix: kagiAssistantURL,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -232,6 +230,11 @@ func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (data *ka
 	} else {
 		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": kagiAssistantURL}, tabID, windowID); err != nil {
 			return nil, err
+		}
+		if tabID != nil {
+			if err := waitForTabReady(ctx, client, *tabID, tabReadyOptions{URLPrefix: kagiAssistantURL}); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -244,20 +247,9 @@ func fetchKagiAssistant(ctx context.Context, s *KagiAssistantSettings) (data *ka
 		}
 	}()
 
-	time.Sleep(1200 * time.Millisecond)
-
 	var resp map[string]any
 	var respErr error
-	for attempt := 0; attempt < 4; attempt++ {
-		resp, respErr = ExecuteTool(ctx, client, "js", map[string]any{"code": code}, tabID, windowID)
-		if respErr == nil {
-			break
-		}
-		if !strings.Contains(respErr.Error(), "Cannot find default execution context") {
-			return nil, respErr
-		}
-		time.Sleep(750 * time.Millisecond)
-	}
+	resp, respErr = ExecuteTool(ctx, client, "js", map[string]any{"code": code}, tabID, windowID)
 	if respErr != nil {
 		return nil, respErr
 	}
