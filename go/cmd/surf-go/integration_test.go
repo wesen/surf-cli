@@ -341,7 +341,7 @@ func TestSurfGoKagiAssistantCommandUsesJSAgainstMockHost(t *testing.T) {
 	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"kagi-assistant", "hello", "--assistant", "Quick", "--tags", "Temporary,photo", "--create-tags", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	root.SetArgs([]string{"kagi", "assistant", "hello", "--assistant", "Quick", "--tags", "Temporary,photo", "--create-tags", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("command failed: %v", err)
 	}
@@ -409,7 +409,7 @@ func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
 	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"chatgpt-transcript", "--with-activity", "--activity-limit", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	root.SetArgs([]string{"chatgpt", "transcript", "--with-activity", "--activity-limit", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("command failed: %v", err)
 	}
@@ -557,7 +557,228 @@ func TestSurfGoKagiSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T
 	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"kagi-search", "--query", "llm transcript attribution", "--max-results", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	root.SetArgs([]string{"kagi", "search", "--query", "llm transcript attribution", "--max-results", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
+
+func TestSurfGoGmailListCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		for i := 0; i < 4; i++ {
+			conn, err := ln.Accept()
+			if err != nil {
+				done <- err
+				return
+			}
+
+			reader := bufio.NewReader(conn)
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			var req map[string]any
+			if err := json.Unmarshal(line, &req); err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			params := req["params"].(map[string]any)
+
+			switch i {
+			case 0:
+				if params["tool"] != "tab.new" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				if args["url"] != "https://mail.google.com/mail/u/0/#inbox" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected tab.new url: %v", args["url"])
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":88,"url":"https://mail.google.com/mail/u/0/#inbox"}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 1:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
+				if !strings.Contains(code, "readyState") {
+					_ = conn.Close()
+					done <- fmt.Errorf("expected tab-ready probe, got: %q", code)
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"href":"https://mail.google.com/mail/u/0/#inbox","title":"Inbox - Gmail","readyState":"complete"}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
+				if !strings.Contains(code, `"mailbox":"inbox"`) {
+					_ = conn.Close()
+					done <- fmt.Errorf("missing gmail list inbox options: %q", code)
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"href":"https://mail.google.com/mail/u/0/#inbox","title":"Inbox - Gmail","mailbox":"inbox","waitedMs":300,"resultCount":1,"threads":[{"index":1,"threadId":"#thread-f:1","legacyThreadId":"abc","participant":"GitHub","subject":"Security alert","snippet":"Snippet","timestamp":"7:31 AM","unread":true,"starred":false,"hasAttachment":false}]}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 3:
+				if params["tool"] != "tab.close" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected fourth tool: %v", params["tool"])
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":88}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			}
+
+			_ = conn.Close()
+			if err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"gmail", "list", "--inbox", "--max-results", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
+
+func TestSurfGoGmailSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		for i := 0; i < 4; i++ {
+			conn, err := ln.Accept()
+			if err != nil {
+				done <- err
+				return
+			}
+
+			reader := bufio.NewReader(conn)
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			var req map[string]any
+			if err := json.Unmarshal(line, &req); err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			params := req["params"].(map[string]any)
+
+			switch i {
+			case 0:
+				if params["tool"] != "tab.new" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":89,"url":"https://mail.google.com/mail/u/0/#inbox"}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 1:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"href":"https://mail.google.com/mail/u/0/#inbox","title":"Inbox - Gmail","readyState":"complete"}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 2:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected third tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
+				if !strings.Contains(code, `"query":"from:boss"`) {
+					_ = conn.Close()
+					done <- fmt.Errorf("missing gmail search query options: %q", code)
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"href":"https://mail.google.com/mail/u/0/#search/from%3Aboss","title":"Search results - Gmail","query":"from:boss","waitedMs":350,"resultCount":1,"threads":[{"index":1,"threadId":"#thread-f:2","legacyThreadId":"def","participant":"Boss","subject":"Follow-up","snippet":"Please send the draft","timestamp":"9:10 AM","unread":false,"starred":false,"hasAttachment":true}]}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 3:
+				if params["tool"] != "tab.close" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected fourth tool: %v", params["tool"])
+					return
+				}
+				resp := map[string]any{"type": "tool_response", "id": req["id"], "result": map[string]any{"content": []map[string]any{{"type": "text", "text": `{"success":true,"tabId":89}`}}}}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			}
+
+			_ = conn.Close()
+			if err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"gmail", "search", "from:boss", "--max-results", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("command failed: %v", err)
 	}

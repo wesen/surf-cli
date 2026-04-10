@@ -31,6 +31,14 @@ topics:
       description: Command-line interface design and usage
     - slug: onboarding
       description: Onboarding-oriented architecture and implementation guidance for new engineers
+    - slug: surf-go
+      description: surf-go CLI implementation and command design
+    - slug: gmail
+      description: Gmail browser automation and command design
+    - slug: kagi
+      description: Kagi browser automation and command design
+    - slug: browser-automation
+      description: Browser-driven automation workflows and command design
 docTypes:
     - slug: design-doc
       description: Structured rationale and architecture notes

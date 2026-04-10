@@ -43,58 +43,67 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	if err != nil {
 		return nil, err
 	}
-	rootCmd.AddCommand(cobraChatGPT)
+	cobraChatGPT.Use = "ask"
 
 	chatGPTTranscriptCmd, err := commands.NewChatGPTTranscriptCommand()
 	if err != nil {
 		return nil, err
 	}
-	cobraChatGPTTranscript, err := cli.BuildCobraCommand(chatGPTTranscriptCmd,
-		cli.WithDualMode(true),
-		cli.WithGlazeToggleFlag("with-glaze-output"),
-		cli.WithParserConfig(cli.CobraParserConfig{
-			ShortHelpSections: []string{schema.DefaultSlug},
-			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
-		}),
-	)
+	cobraChatGPTTranscript, err := buildDualModeCommand(chatGPTTranscriptCmd)
 	if err != nil {
 		return nil, err
 	}
-	rootCmd.AddCommand(cobraChatGPTTranscript)
+	cobraChatGPTTranscript.Use = "transcript"
 
 	kagiSearchCmd, err := commands.NewKagiSearchCommand()
 	if err != nil {
 		return nil, err
 	}
-	cobraKagiSearch, err := cli.BuildCobraCommand(kagiSearchCmd,
-		cli.WithDualMode(true),
-		cli.WithGlazeToggleFlag("with-glaze-output"),
-		cli.WithParserConfig(cli.CobraParserConfig{
-			ShortHelpSections: []string{schema.DefaultSlug},
-			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
-		}),
-	)
+	cobraKagiSearch, err := buildDualModeCommand(kagiSearchCmd)
 	if err != nil {
 		return nil, err
 	}
-	rootCmd.AddCommand(cobraKagiSearch)
+	cobraKagiSearch.Use = "search"
 
 	kagiAssistantCmd, err := commands.NewKagiAssistantCommand()
 	if err != nil {
 		return nil, err
 	}
-	cobraKagiAssistant, err := cli.BuildCobraCommand(kagiAssistantCmd,
-		cli.WithDualMode(true),
-		cli.WithGlazeToggleFlag("with-glaze-output"),
-		cli.WithParserConfig(cli.CobraParserConfig{
-			ShortHelpSections: []string{schema.DefaultSlug},
-			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
-		}),
-	)
+	cobraKagiAssistant, err := buildDualModeCommand(kagiAssistantCmd)
 	if err != nil {
 		return nil, err
 	}
-	rootCmd.AddCommand(cobraKagiAssistant)
+	cobraKagiAssistant.Use = "assistant"
+
+	gmailListCmd, err := commands.NewGmailListCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraGmailList, err := buildDualModeCommand(gmailListCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	gmailSearchCmd, err := commands.NewGmailSearchCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraGmailSearch, err := buildDualModeCommand(gmailSearchCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	chatGPTGroup := &cobra.Command{Use: "chatgpt", Short: "ChatGPT commands"}
+	chatGPTGroup.AddCommand(cobraChatGPT, cobraChatGPTTranscript)
+	rootCmd.AddCommand(chatGPTGroup)
+
+	kagiGroup := &cobra.Command{Use: "kagi", Short: "Kagi commands"}
+	kagiGroup.AddCommand(cobraKagiSearch, cobraKagiAssistant)
+	rootCmd.AddCommand(kagiGroup)
+
+	gmailGroup := &cobra.Command{Use: "gmail", Short: "Gmail commands"}
+	gmailGroup.AddCommand(cobraGmailList, cobraGmailSearch)
+	rootCmd.AddCommand(gmailGroup)
 
 	rawCmd, err := commands.NewToolRawCommand()
 	if err != nil {
@@ -138,6 +147,17 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 
 func buildGlazedCommand(cmd cmds.Command) (*cobra.Command, error) {
 	return cli.BuildCobraCommandFromCommand(cmd,
+		cli.WithParserConfig(cli.CobraParserConfig{
+			ShortHelpSections: []string{schema.DefaultSlug},
+			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
+		}),
+	)
+}
+
+func buildDualModeCommand(cmd cmds.Command) (*cobra.Command, error) {
+	return cli.BuildCobraCommand(cmd,
+		cli.WithDualMode(true),
+		cli.WithGlazeToggleFlag("with-glaze-output"),
 		cli.WithParserConfig(cli.CobraParserConfig{
 			ShortHelpSections: []string{schema.DefaultSlug},
 			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,

@@ -13,9 +13,9 @@ Commands:
 - navigate
 - tab.new
 - tab.close
-- chatgpt-transcript
-- kagi-search
-- kagi-assistant
+- chatgpt transcript
+- kagi search
+- kagi assistant
 Flags:
 - with-glaze-output
 - debug-socket
@@ -30,13 +30,17 @@ SectionType: Tutorial
 
 This tutorial is the practical process for building a non-trivial browser-side verb in `surf-go`. It is based on three real implementations in this repository:
 
-- `chatgpt-transcript` in `go/internal/cli/commands/chatgpt_transcript.go`
-- `kagi-search` in `go/internal/cli/commands/kagi_search.go`
-- `kagi-assistant` in `go/internal/cli/commands/kagi_assistant.go`
+- `surf-go chatgpt transcript` in `go/internal/cli/commands/chatgpt_transcript.go`
+- `surf-go kagi search` in `go/internal/cli/commands/kagi_search.go`
+- `surf-go kagi assistant` in `go/internal/cli/commands/kagi_assistant.go`
 
 The goal is not just to explain the shape of the final code. The goal is to explain the workflow that gets you there without guessing: how to prototype the page logic, how to decide whether to reuse an existing tab or create one, how to structure the embedded JavaScript, how to expose both Markdown and structured rows, how to clean up browser state after the command finishes, and how to test the result at the right layers.
 
 If someone follows this document carefully, they should be able to add the next complex browser verb without having to rediscover the same pitfalls.
+
+For stateful mailbox-style workflows, also read:
+
+- `surf-go help build-stateful-gmail-verbs`
 
 ## What This Pattern Is For
 
@@ -88,7 +92,7 @@ That last split matters. The browser script should be responsible for page inter
 
 Use these as templates.
 
-### `chatgpt-transcript`
+### `surf-go chatgpt transcript`
 
 Relevant files:
 
@@ -105,7 +109,7 @@ What it demonstrates:
 - optional export artifacts
 - embedding production page logic with `go:embed`
 
-### `kagi-search`
+### `surf-go kagi search`
 
 Relevant files:
 
@@ -121,7 +125,7 @@ What it demonstrates:
 - suppressing noisy page blocks when the page does not expose useful data
 - the same dual-mode output structure with a simpler page model
 
-### `kagi-assistant`
+### `surf-go kagi assistant`
 
 Relevant files:
 
