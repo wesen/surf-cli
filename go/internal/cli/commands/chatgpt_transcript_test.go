@@ -81,6 +81,29 @@ func TestWriteChatGPTTranscriptExportJSON(t *testing.T) {
 	}
 }
 
+func TestRenderChatGPTTranscriptMarkdown(t *testing.T) {
+	text := renderChatGPTTranscriptMarkdown(map[string]any{
+		"href":             "https://chatgpt.com/c/abc",
+		"title":            "Conversation",
+		"withActivity":     true,
+		"activityExported": 1,
+		"transcript": []any{
+			map[string]any{
+				"index":             0,
+				"role":              "assistant",
+				"messageId":         "m1",
+				"model":             "gpt-5",
+				"text":              "hello",
+				"thoughtButtonText": "Thought for 5s",
+				"activityText":      "reasoning",
+			},
+		},
+	})
+	if !strings.Contains(text, "# Conversation") || !strings.Contains(text, "### Activity") || !strings.Contains(text, "Thought for 5s") {
+		t.Fatalf("unexpected markdown render: %s", text)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

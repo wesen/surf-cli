@@ -45,7 +45,14 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	if err != nil {
 		return nil, err
 	}
-	cobraChatGPTTranscript, err := buildGlazedCommand(chatGPTTranscriptCmd)
+	cobraChatGPTTranscript, err := cli.BuildCobraCommand(chatGPTTranscriptCmd,
+		cli.WithDualMode(true),
+		cli.WithGlazeToggleFlag("with-glaze-output"),
+		cli.WithParserConfig(cli.CobraParserConfig{
+			ShortHelpSections: []string{schema.DefaultSlug},
+			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}

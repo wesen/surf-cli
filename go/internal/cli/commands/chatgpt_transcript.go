@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,9 @@ var chatGPTTranscriptScript string
 type ChatGPTTranscriptCommand struct {
 	*cmds.CommandDescription
 }
+
+var _ cmds.GlazeCommand = (*ChatGPTTranscriptCommand)(nil)
+var _ cmds.WriterCommand = (*ChatGPTTranscriptCommand)(nil)
 
 type ChatGPTTranscriptSettings struct {
 	WithActivity  bool   `glazed:"with-activity"`
@@ -56,8 +60,8 @@ func NewChatGPTTranscriptCommand() (*ChatGPTTranscriptCommand, error) {
 
 	desc := cmds.NewCommandDescription(
 		"chatgpt-transcript",
-		cmds.WithShort("Export the current ChatGPT conversation as structured rows"),
-		cmds.WithLong("Extracts the current chatgpt.com conversation from the active page DOM. Optionally opens 'Thought for ...' Activity flyouts and attaches the scraped content to assistant turns."),
+		cmds.WithShort("Export the current ChatGPT conversation"),
+		cmds.WithLong("Extracts the current chatgpt.com conversation from the active page DOM. By default it prints a human-readable Markdown transcript. Use --with-glaze-output for structured row output. Optionally opens 'Thought for ...' Activity flyouts and attaches the scraped content to assistant turns."),
 		cmds.WithFlags(
 			fields.New("with-activity", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Open and scrape ChatGPT Activity flyouts for assistant turns that have thought traces")),
 			fields.New("activity-limit", fields.TypeInteger, fields.WithDefault(0), fields.WithHelp("Maximum number of Activity flyouts to open; 0 means all assistant turns with thought traces")),
@@ -97,9 +101,52 @@ func (c *ChatGPTTranscriptCommand) RunIntoGlazeProcessor(
 		return err
 	}
 
-	code, err := buildChatGPTTranscriptCode(s)
+	data, err := fetchChatGPTTranscript(ctx, s)
 	if err != nil {
 		return err
+	}
+	if s.ExportFile != "" {
+		if err := writeChatGPTTranscriptExport(s.ExportFile, s.ExportFormat, data); err != nil {
+			return err
+		}
+	}
+
+	for _, row := range chatGPTTranscriptDataToRows(data) {
+		if err := gp.AddRow(ctx, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *ChatGPTTranscriptCommand) RunIntoWriter(
+	ctx context.Context,
+	vals *values.Values,
+	w io.Writer,
+) error {
+	s := &ChatGPTTranscriptSettings{}
+	if err := vals.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
+		return err
+	}
+
+	data, err := fetchChatGPTTranscript(ctx, s)
+	if err != nil {
+		return err
+	}
+	if s.ExportFile != "" {
+		if err := writeChatGPTTranscriptExport(s.ExportFile, s.ExportFormat, data); err != nil {
+			return err
+		}
+	}
+
+	_, err = io.WriteString(w, renderChatGPTTranscriptMarkdown(data.Raw))
+	return err
+}
+
+func fetchChatGPTTranscript(ctx context.Context, s *ChatGPTTranscriptSettings) (*chatGPTTranscriptData, error) {
+	code, err := buildChatGPTTranscriptCode(s)
+	if err != nil {
+		return nil, err
 	}
 
 	client := transport.NewClient(s.Socket, time.Duration(s.TimeoutMS)*time.Millisecond)
@@ -116,25 +163,10 @@ func (c *ChatGPTTranscriptCommand) RunIntoGlazeProcessor(
 
 	resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": code}, tabID, windowID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	data, err := parseChatGPTTranscriptResponse(resp)
-	if err != nil {
-		return err
-	}
-	if s.ExportFile != "" {
-		if err := writeChatGPTTranscriptExport(s.ExportFile, s.ExportFormat, data); err != nil {
-			return err
-		}
-	}
-
-	for _, row := range chatGPTTranscriptDataToRows(data) {
-		if err := gp.AddRow(ctx, row); err != nil {
-			return err
-		}
-	}
-	return nil
+	return parseChatGPTTranscriptResponse(resp)
 }
 
 func parseChatGPTTranscriptResponse(resp map[string]any) (*chatGPTTranscriptData, error) {

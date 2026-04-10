@@ -266,7 +266,7 @@ func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
 	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"chatgpt-transcript", "--with-activity", "--activity-limit", "3", "--socket-path", sock, "--output", "json"})
+	root.SetArgs([]string{"chatgpt-transcript", "--with-activity", "--activity-limit", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("command failed: %v", err)
 	}

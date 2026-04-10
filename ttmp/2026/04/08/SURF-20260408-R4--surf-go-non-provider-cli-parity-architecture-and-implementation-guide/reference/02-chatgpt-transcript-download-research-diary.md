@@ -355,3 +355,40 @@ That avoids namespace conflicts with the Glazed output system while still making
 - `go test ./internal/cli/commands ./cmd/surf-go` passed
 
 The final live browser validation of the export path was blocked in this session because the native host socket was not running at the time of the check (`.../surf.sock` missing), so the real-shell verification step still needs to be rerun with the extension/native host active.
+
+## Step 11: Refactor `chatgpt-transcript` into a true dual-mode Glazed command
+
+The next adjustment was to align the command with the documented Glazed dual-mode pattern rather than treating Markdown export as only a side-effecting file feature.
+
+### Final behavior
+
+- default mode: classic writer output to stdout
+  - renders a Markdown transcript
+- `--with-glaze-output`
+  - switches the same command to structured Glazed row output
+
+This matches the pattern documented in Glazed's `05-build-first-command.md`: a command can implement both the text-oriented interface and the Glaze interface, with a switch flag to choose structured mode.
+
+### Important implementation detail
+
+In the installed `glazed v1.0.1`, a command that implements both `WriterCommand` and `GlazeCommand` must be built with:
+
+- `cli.WithDualMode(true)`
+- `cli.WithGlazeToggleFlag("with-glaze-output")`
+
+Otherwise the default command builder will pick the writer path first and Glaze output will never be reached.
+
+### Code changes
+
+- `chatgpt-transcript` now implements:
+  - `RunIntoWriter(...)`
+  - `RunIntoGlazeProcessor(...)`
+- both paths share a common transcript fetch helper
+- Markdown is rendered directly to stdout in writer mode
+- structured rows continue to flow through Glazed when `--with-glaze-output` is set
+
+### Validation
+
+- `go test ./internal/cli/commands ./cmd/surf-go` passed
+- command help now shows the dual-mode toggle:
+  - `--with-glaze-output`
