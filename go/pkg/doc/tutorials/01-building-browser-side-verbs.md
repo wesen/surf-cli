@@ -12,25 +12,29 @@ Commands:
 - js
 - navigate
 - tab.new
+- tab.close
 - chatgpt-transcript
 - kagi-search
+- kagi-assistant
 Flags:
 - with-glaze-output
 - debug-socket
 - tab-id
 - window-id
+- keep-tab-open
 IsTopLevel: true
 IsTemplate: false
 ShowPerDefault: true
 SectionType: Tutorial
 ---
 
-This tutorial is the practical process for building a non-trivial browser-side verb in `surf-go`. It is based on two real implementations in this repository:
+This tutorial is the practical process for building a non-trivial browser-side verb in `surf-go`. It is based on three real implementations in this repository:
 
 - `chatgpt-transcript` in `go/internal/cli/commands/chatgpt_transcript.go`
 - `kagi-search` in `go/internal/cli/commands/kagi_search.go`
+- `kagi-assistant` in `go/internal/cli/commands/kagi_assistant.go`
 
-The goal is not just to explain the shape of the final code. The goal is to explain the workflow that gets you there without guessing: how to prototype the page logic, how to decide whether to reuse an existing tab or create one, how to structure the embedded JavaScript, how to expose both Markdown and structured rows, and how to test the result at the right layers.
+The goal is not just to explain the shape of the final code. The goal is to explain the workflow that gets you there without guessing: how to prototype the page logic, how to decide whether to reuse an existing tab or create one, how to structure the embedded JavaScript, how to expose both Markdown and structured rows, how to clean up browser state after the command finishes, and how to test the result at the right layers.
 
 If someone follows this document carefully, they should be able to add the next complex browser verb without having to rediscover the same pitfalls.
 
@@ -80,7 +84,7 @@ surf-go command
 
 That last split matters. The browser script should be responsible for page interaction and extraction. The Go code should be responsible for presentation and CLI ergonomics.
 
-## The Two Reference Implementations
+## The Reference Implementations
 
 Use these as templates.
 
@@ -117,6 +121,22 @@ What it demonstrates:
 - suppressing noisy page blocks when the page does not expose useful data
 - the same dual-mode output structure with a simpler page model
 
+### `kagi-assistant`
+
+Relevant files:
+
+- `go/internal/cli/commands/kagi_assistant.go`
+- `go/internal/cli/commands/scripts/kagi_assistant.js`
+- `go/internal/cli/commands/kagi_assistant_test.go`
+- `go/cmd/surf-go/integration_test.go`
+
+What it demonstrates:
+
+- stateful UI interaction rather than simple page scraping
+- selecting assistants, models, lenses, and toggles in a live app
+- applying optional tagging state before submission
+- tracking ownership of a command-created tab and closing it by default
+
 ## Step 0 - Write Down the Exact User Contract
 
 Start by writing one sentence that states what the command does. This is not optional. It prevents the implementation from drifting into “browser stuff” without a stable target.
@@ -139,6 +159,15 @@ For `kagi-search`, the contract is:
 - page action: open a tab at the Kagi search URL, or reuse an explicitly targeted tab
 - extraction target: Kagi result rows and optionally Quick Answer if substantive
 - output modes: Markdown by default, structured rows behind `--with-glaze-output`
+- cleanup: close a tab the command created itself unless `--keep-tab-open` is set
+
+For `kagi-assistant`, the contract is:
+
+- entry condition: the Surf native host is running and the browser session is already logged into Kagi
+- page action: open or reuse the assistant page, select assistant/model/lens/options, submit a prompt, and optionally apply tags
+- extraction target: response text, thinking/details text, metadata, and tag-selection state
+- output modes: Markdown by default, structured rows behind `--with-glaze-output`
+- cleanup: close a tab the command created itself unless `--keep-tab-open` is set
 
 If you cannot write this down cleanly, the command is not ready to implement.
 
@@ -168,9 +197,18 @@ Then move to a probe that identifies the exact structures you care about. For ex
 - snippet blocks
 - whether Quick Answer actually contained useful answer text
 
-Store those probes in the ticket workspace while researching. For the Kagi implementation, the ticket-side artifact is:
+Store those probes in the ticket workspace while researching. Use ordered file names so the investigation can be replayed later instead of reverse-engineered from timestamps.
 
-- `ttmp/2026/04/08/SURF-20260408-R4--surf-go-non-provider-cli-parity-architecture-and-implementation-guide/scripts/kagi_search_extract_probe.js`
+Recommended pattern:
+
+- `01-page-shape-probe.js`
+- `02-dialog-open-probe.js`
+- `03-option-selection-probe.js`
+- `04-submit-and-extract-probe.js`
+
+For Kagi Assistant, that ordered trail lives under:
+
+- `ttmp/2026/04/10/KAGI-ASSISTANT/scripts/`
 
 Research scripts belong in the ticket. Production scripts belong in the Go package.
 
@@ -241,6 +279,45 @@ else:
 That logic lives in `fetchKagiSearch(...)` in `go/internal/cli/commands/kagi_search.go`.
 
 When adding a new verb, decide this up front and encode it in the fetch helper. Do not let it emerge accidentally from whatever `navigate` happens to do.
+
+`kagi-assistant` uses the same acquisition pattern, but it also mutates more browser state:
+
+```text
+if tab-id and window-id are both absent:
+  create a new tab at the assistant URL
+  remember that the command owns that tab
+  run assistant interaction JS against that tab
+  close the owned tab unless --keep-tab-open was set
+else:
+  navigate the targeted tab/window
+  run assistant interaction JS against that target
+  never close a user-supplied target
+```
+
+## Step 3.5 - Define Browser-State Ownership and Cleanup
+
+This step should be explicit in the design, not left as an implementation detail.
+
+If the command changes browser state, decide which of these it owns:
+
+- created tabs
+- opened dialogs or flyouts
+- form values
+- toggles or dropdown selections
+- created remote objects such as tags or saved items
+
+Use these rules:
+
+1. If the command creates a tab because the user did not supply one, the command owns that tab.
+2. If the user supplied `--tab-id` or `--window-id`, the command does not own that tab and must not close it.
+3. If cleanup would destroy or mutate user data, it must be behind an explicit opt-in flag.
+4. If cleanup only removes command-owned temporary browser state, make it the default.
+
+The current Kagi commands follow this contract:
+
+- default: close an owned tab when finished
+- opt-out: `--keep-tab-open`
+- never close a user-targeted tab
 
 ## Step 4 - Move Production Page Logic into an Embedded Script
 
@@ -360,8 +437,10 @@ fetchThing(ctx, settings):
   create transport client
   resolve tab strategy
   maybe navigate or create tab
+  remember whether the command owns the tab
   execute js tool
   parse structured response
+  close owned tab unless the command was told to keep it open
   return typed data wrapper
 ```
 
@@ -516,11 +595,19 @@ Use mock unix-socket tests in `go/cmd/surf-go/integration_test.go` to verify:
 - the command sends the expected tool sequence
 - the arguments are correct
 - the embedded script prelude contains the expected options
+- cleanup requests such as `tab.close` happen only when they should
 
 This is especially important for commands like `kagi-search` whose request sequence matters. After the active-tab bug, the integration test now confirms:
 
 1. `tab.new` is sent first when no explicit target exists
 2. `js` is sent second with the expected `SURF_OPTIONS`
+3. `tab.close` is sent third when the command created the tab itself
+
+For `kagi-assistant`, the integration test also confirms:
+
+1. `tab.new` is sent first when no explicit target exists
+2. `js` contains the expected assistant/model/tag options
+3. `tab.close` is sent only for a command-owned tab
 
 ### Layer 3: real-browser validation
 
@@ -560,6 +647,7 @@ A good diary records:
 - rejected selectors
 - timing behavior
 - dedupe rules
+- ownership and cleanup rules
 - what was validated live versus only in tests
 
 ## A Concrete Walkthrough: `kagi-search`
@@ -605,6 +693,7 @@ We first used `navigate` directly and discovered the active-tab dependency. The 
 
 - `tab.new` when no explicit tab or window target is supplied
 - `navigate` only when a target is explicitly given
+- `tab.close` when the command created the tab itself and `--keep-tab-open` is false
 
 That is the kind of issue you should expect and design around.
 
@@ -654,6 +743,7 @@ Before starting:
 
 - decide the user contract
 - decide whether the command owns the tab or reuses it
+- decide what browser state the command must clean up
 - decide whether the result should default to Markdown or rows
 
 During browser research:
@@ -675,6 +765,7 @@ Before calling it done:
 - add mock-host integration tests
 - run a real-browser validation pass
 - wire the command into the root
+- verify cleanup behavior for command-owned tabs and user-targeted tabs
 - make sure `surf-go help <command>` and `surf-go help build-browser-side-verbs` work
 
 ## Common Failure Modes
@@ -703,6 +794,19 @@ Fix:
 
 - decide whether the command should create its own tab
 - if yes, do `tab.new` explicitly and capture the resulting `tabId`
+
+### “The command leaves junk tabs behind”
+
+Cause:
+
+- the command created a tab but never modeled ownership and cleanup explicitly
+
+Fix:
+
+- track whether the command created the tab
+- close that tab by default after successful completion
+- add an escape hatch such as `--keep-tab-open`
+- never close a tab supplied by `--tab-id` or `--window-id`
 
 ### “The page returns something that looks structured but is actually useless”
 
@@ -760,6 +864,7 @@ validation:
   unit tests
   mock-host integration test
   real-browser validation
+  owned-tab cleanup validation
   help page and discoverability check
 ```
 
