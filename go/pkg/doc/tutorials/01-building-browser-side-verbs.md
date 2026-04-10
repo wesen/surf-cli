@@ -1,15 +1,17 @@
 ---
 Title: Build Browser-Side Verbs in surf-go
 Slug: build-browser-side-verbs
-Short: Step-by-step process for turning complex browser automation into a tested surf-go verb.
+Short: Practical runbook for turning complex browser automation into a tested surf-go verb.
 Topics:
 - tutorial
 - commands
 - browser-automation
 - surf-go
+- glazed
 Commands:
 - js
 - navigate
+- tab.new
 - chatgpt-transcript
 - kagi-search
 Flags:
@@ -23,155 +25,417 @@ ShowPerDefault: true
 SectionType: Tutorial
 ---
 
-Browser-side verbs in `surf-go` are commands whose real work happens inside a live web page. They are different from simple transport wrappers because the hard part is usually DOM discovery, timing, retries, and deciding which data shape is stable enough to expose to the CLI. The right process is to prove the browser behavior first, then package it as a Go command once the page-side algorithm is stable.
+This tutorial is the practical process for building a non-trivial browser-side verb in `surf-go`. It is based on two real implementations in this repository:
 
-This tutorial explains the process we used for `chatgpt-transcript`, which is now the reference implementation for a complex browser-side verb in this codebase. It also shows the same flow applied to `kagi-search`.
+- `chatgpt-transcript` in `go/internal/cli/commands/chatgpt_transcript.go`
+- `kagi-search` in `go/internal/cli/commands/kagi_search.go`
 
-## What You Will Build
+The goal is not just to explain the shape of the final code. The goal is to explain the workflow that gets you there without guessing: how to prototype the page logic, how to decide whether to reuse an existing tab or create one, how to structure the embedded JavaScript, how to expose both Markdown and structured rows, and how to test the result at the right layers.
 
-By the end of this tutorial, you will know how to build a `surf-go` command that:
+If someone follows this document carefully, they should be able to add the next complex browser verb without having to rediscover the same pitfalls.
 
-- runs browser logic inside the active tab,
-- survives real page timing and DOM changes,
-- exposes structured Glazed rows for machine use,
-- optionally exposes human-readable text output with dual-mode Glazed support,
-- and keeps the browser-side logic embedded with `go:embed` so it is easy to find and modify.
+## What This Pattern Is For
 
-## Prerequisites
+Use this pattern when the command's real logic lives inside a browser page rather than inside the Go process.
 
-- A working `surf-go` checkout under `go/`
-- The Surf browser extension and native host running
-- A command you can use to prototype browser-side JavaScript, currently `surf-go js`
-- Familiarity with Glazed command construction in `go/internal/cli/commands`
+Typical examples:
 
-## Step 1 - Start with a concrete browser problem
+- scrape a conversation or search results page
+- interact with page controls before extracting data
+- wait for a rich web app to settle
+- open or close page subviews and attach their content to the main output
 
-A good browser-side verb starts from a page task, not from a command skeleton. You need to know exactly what the user wants from the page before you choose flags, output schemas, or scraping structure.
+Do not use this pattern for purely transport-level commands such as:
 
-For `chatgpt-transcript`, the target problem was: extract the current `chatgpt.com` conversation as structured turns and optionally include the Activity sidebar content behind `Thought for ...` buttons.
+- listing tabs
+- switching windows
+- basic navigation wrappers with no page scraping
 
-For `kagi-search`, the target problem is: navigate to a Kagi results page for a query, wait until the results settle, and return structured result rows with titles, URLs, snippets, and result ordering.
+Those commands can usually remain thin wrappers over an existing host tool.
 
-Before writing command code, reduce the browser job to one sentence like this:
+## The Actual Architecture
 
-- “Open or reuse the target page.”
-- “Wait until the stable content appears.”
-- “Extract the minimal structured payload we actually want.”
+Before writing code, understand the execution path. A browser-side verb in `surf-go` typically flows through these layers:
 
-That sentence is the contract that the later Go command should preserve.
+1. Cobra + Glazed command
+2. Go command logic in `go/internal/cli/commands`
+3. socket transport in `go/internal/cli/transport/client.go`
+4. host tool request envelope from `go/internal/cli/commands/base.go`
+5. native host router in `go/internal/host/router/toolmap.go`
+6. extension service worker in `src/service-worker/index.ts`
+7. page DOM and page JavaScript
 
-## Step 2 - Prototype the page logic with `surf-go js`
+For the commands in this repository, the most common tool path is:
 
-The fastest way to discover selectors, timing, and failure modes is to run JavaScript directly in the real browser session. This lets you answer page questions before committing to a Go API shape.
+```text
+surf-go command
+  -> ExecuteTool(...)
+  -> tool_request over unix socket
+  -> service worker receives mapped host message
+  -> page-side JS runs
+  -> response comes back as structured text or plain text
+  -> Go parses once
+  -> Go renders rows or Markdown
+```
 
-The working loop is:
+That last split matters. The browser script should be responsible for page interaction and extraction. The Go code should be responsible for presentation and CLI ergonomics.
 
-1. write a small page script,
-2. run it through `surf-go js`,
-3. inspect the returned payload,
-4. repeat until the browser algorithm is stable.
+## The Two Reference Implementations
+
+Use these as templates.
+
+### `chatgpt-transcript`
+
+Relevant files:
+
+- `go/internal/cli/commands/chatgpt_transcript.go`
+- `go/internal/cli/commands/scripts/chatgpt_transcript.js`
+- `go/internal/cli/commands/chatgpt_transcript_test.go`
+- `go/cmd/surf-go/integration_test.go`
+
+What it demonstrates:
+
+- extracting multiple structured records from a complex page
+- handling follow-up UI state such as Activity sidebars
+- dual-mode Glazed output
+- optional export artifacts
+- embedding production page logic with `go:embed`
+
+### `kagi-search`
+
+Relevant files:
+
+- `go/internal/cli/commands/kagi_search.go`
+- `go/internal/cli/commands/scripts/kagi_search.js`
+- `go/internal/cli/commands/kagi_search_test.go`
+- `go/cmd/surf-go/integration_test.go`
+
+What it demonstrates:
+
+- navigate-or-create-tab strategy
+- search-result scraping with deduplication
+- suppressing noisy page blocks when the page does not expose useful data
+- the same dual-mode output structure with a simpler page model
+
+## Step 0 - Write Down the Exact User Contract
+
+Start by writing one sentence that states what the command does. This is not optional. It prevents the implementation from drifting into “browser stuff” without a stable target.
+
+Good examples:
+
+- “Export the current ChatGPT conversation as structured turns and optionally attach Activity sidebar text.”
+- “Run a Kagi search for a query and return the main result rows as Markdown or structured rows.”
+
+Then write a short contract with four parts:
+
+1. entry condition
+2. page action
+3. extraction target
+4. output modes
+
+For `kagi-search`, the contract is:
+
+- entry condition: the Surf native host is running
+- page action: open a tab at the Kagi search URL, or reuse an explicitly targeted tab
+- extraction target: Kagi result rows and optionally Quick Answer if substantive
+- output modes: Markdown by default, structured rows behind `--with-glaze-output`
+
+If you cannot write this down cleanly, the command is not ready to implement.
+
+## Step 1 - Prototype in the Real Browser with `surf-go js`
+
+Do not start by writing Go command code. Start by proving the browser logic in a real page.
+
+This is the recommended loop:
+
+1. open the target page in the browser
+2. run tiny JavaScript probes using `surf-go js`
+3. inspect the returned data
+4. refine selectors and timing
+5. save the useful probes in the ticket `scripts/` folder
 
 Example:
 
 ```bash
 cd go
-go run ./cmd/surf-go js 'return { href: location.href, title: document.title }'
+go run ./cmd/surf-go js 'return { href: location.href, title: document.title, ready: document.readyState }'
 ```
 
-When the page task is non-trivial, keep the scripts in a ticket `scripts/` folder while you investigate. This preserves the chronology of what worked and failed. Once the logic is stable enough to become a real command, move the production version into the Go package and embed it.
+Then move to a probe that identifies the exact structures you care about. For example, on Kagi we validated:
 
-## Step 3 - Harden the browser algorithm before writing the verb
+- result containers
+- title links
+- snippet blocks
+- whether Quick Answer actually contained useful answer text
 
-The first script that “works once” is usually not good enough. Browser-side verbs fail in practice because of page timing, duplicate DOM nodes, stale overlays, and layout changes. You need to harden the algorithm while it is still cheap to change.
+Store those probes in the ticket workspace while researching. For the Kagi implementation, the ticket-side artifact is:
 
-For `chatgpt-transcript`, hardening meant:
+- `ttmp/2026/04/08/SURF-20260408-R4--surf-go-non-provider-cli-parity-architecture-and-implementation-guide/scripts/kagi_search_extract_probe.js`
 
-- walking conversation-turn sections in DOM order,
-- deduplicating message candidates by ID,
-- choosing the longest non-empty assistant payload,
-- opening Activity sidebars with retries,
-- and matching the opened flyout to the expected `Thought for ...` duration.
+Research scripts belong in the ticket. Production scripts belong in the Go package.
 
-For Kagi, hardening will likely mean:
+## Step 2 - Stabilize the Page Algorithm Before You Write the Command
 
-- waiting for the search results container rather than assuming the page is ready immediately,
-- handling ads or sidebars that should not count as primary results,
-- and choosing selectors that survive minor class changes.
+The first script that returns plausible data is not enough. At this stage, your job is to remove ambiguity.
 
-A practical rule: if you cannot describe the retry and matching logic in prose, the script is not ready to become a command.
+Things to check deliberately:
 
-## Step 4 - Move production page logic into the Go package
+- does the page render duplicate logical items?
+- do you need to dedupe by URL, message ID, or some other stable key?
+- do some containers look like results but actually contain menus or sidebars?
+- does the page expose useful data immediately, or do you need to wait for content to settle?
+- do some visible UI blocks contain only labels and no useful payload?
 
-Once the browser algorithm is stable, move it out of ad hoc ticket scripts and into the Go command package. The command-owned script should live next to the command and be embedded with `go:embed`.
+This is where most browser verbs succeed or fail.
 
-Example pattern:
+For `chatgpt-transcript`, stabilization required:
 
-```go
-//go:embed scripts/chatgpt_transcript.js
-var chatGPTTranscriptScript string
+- iterating conversation sections in order
+- gathering message candidates from each section
+- choosing the longest non-empty candidate per message
+- retrying Activity flyout opening and matching by duration text
+
+For `kagi-search`, stabilization required:
+
+- waiting for either `main div._0_SRI.search-result` or `main div.__srgi`
+- deduping by final URL
+- ignoring Quick Answer when it contained only `Quick Answer`, `References`, and `Continue in Assistant`
+
+A good rule is this:
+
+- if the extraction logic depends on “the page looked right once”, it is not stable enough
+- if the logic names explicit selectors, retries, and dedupe rules, it is probably ready
+
+## Step 3 - Decide the Tab Strategy Explicitly
+
+This is the first implementation decision that trips people up.
+
+Your command must decide how it acquires a page context. There are three common modes:
+
+1. current tab only
+2. reuse explicit `--tab-id` or `--window-id`
+3. create a new tab if none is supplied
+
+Do not leave this implicit.
+
+Why this matters:
+
+- `navigate` still depends on a resolved active tab unless you give it a specific target context
+- some commands should be side-effect-free on the user's current page
+- some commands should be self-contained and open their own target page
+
+`chatgpt-transcript` uses the current page context. That is correct because it exports the current open conversation.
+
+`kagi-search` should not require the user to manually create a tab. That is why its fetch path now does:
+
+```text
+if tab-id and window-id are both absent:
+  create a new tab at the Kagi URL
+  capture returned tabId
+  run JS against that tab
+else:
+  navigate the targeted tab/window
+  run JS against that target
 ```
 
-This matters for maintenance:
+That logic lives in `fetchKagiSearch(...)` in `go/internal/cli/commands/kagi_search.go`.
 
-- the command and its page logic stay together,
-- code search finds the exact browser behavior behind the verb,
-- and future edits do not require hunting through ticket artifacts.
+When adding a new verb, decide this up front and encode it in the fetch helper. Do not let it emerge accidentally from whatever `navigate` happens to do.
 
-Ticket scripts still matter for research, but the production command should not depend on `ttmp/...` paths.
+## Step 4 - Move Production Page Logic into an Embedded Script
 
-## Step 5 - Keep the browser script focused on extraction, not presentation
+Once the browser algorithm is stable, move it into `go/internal/cli/commands/scripts/` and embed it.
 
-The embedded browser script should return structured data, not final CLI formatting. It should do the minimum page work needed to produce a stable machine representation.
-
-For `chatgpt-transcript`, the browser script returns a payload like:
-
-- conversation URL,
-- title,
-- turn count,
-- transcript items,
-- optional activity fields.
-
-The Go layer then decides whether to:
-
-- emit one Glazed row per turn,
-- render Markdown to stdout,
-- or write a JSON or Markdown artifact.
-
-This separation keeps page logic stable even when output requirements change.
-
-## Step 6 - Build the Glazed command around shared fetch logic
-
-A browser-side verb should have one shared fetch path that all output modes use. In practice that means:
-
-1. decode Glazed settings,
-2. build the embedded script prelude and options,
-3. execute the browser script through the existing host primitive,
-4. parse the returned payload once,
-5. fan out into row output or text output.
-
-For `chatgpt-transcript`, this became a shared helper that fetches the transcript data once and then supports both:
-
-- `RunIntoGlazeProcessor(...)` for structured rows,
-- `RunIntoWriter(...)` for Markdown output.
-
-That pattern avoids duplicated transport, duplicated parsing, and drifting logic between text and structured modes.
-
-## Step 7 - Use Glazed dual mode when the command needs both human and machine output
-
-Some browser verbs should default to human-readable output but still support structured rows. In `surf-go`, the right pattern is Glazed dual mode.
-
-`chatgpt-transcript` now behaves like this:
-
-- default: Markdown to stdout,
-- `--with-glaze-output`: structured rows.
-
-This is implemented by:
-
-- making the command implement both `cmds.WriterCommand` and `cmds.GlazeCommand`,
-- and registering it with:
+Example:
 
 ```go
-cli.BuildCobraCommand(cmd,
+//go:embed scripts/kagi_search.js
+var kagiSearchScript string
+```
+
+Why this is the right pattern:
+
+- the production page logic is easy to locate with code search
+- command and browser behavior stay together
+- the script ships with the binary
+- future contributors can modify the page logic without hunting through ticket artifacts
+
+Do not read production scripts from `ttmp/...` at runtime.
+
+Keep the embedded script focused on page work:
+
+- wait
+- query
+- click if needed
+- extract
+- return structured data
+
+Do not format Markdown or CLI tables inside the browser script.
+
+## Step 5 - Pass Options Through a Small Prelude
+
+The embedded script should not hardcode every runtime choice. Instead, pass a small options object from Go into the script.
+
+Pattern:
+
+```go
+options := map[string]any{
+    "maxResults": s.MaxResults,
+}
+b, _ := json.Marshal(options)
+code := fmt.Sprintf("const SURF_OPTIONS = %s;\n%s", string(b), embeddedScript)
+```
+
+The JavaScript then starts with:
+
+```js
+const options = typeof SURF_OPTIONS === 'object' && SURF_OPTIONS !== null ? SURF_OPTIONS : {};
+```
+
+Use this pattern for things like:
+
+- maximum result count
+- whether optional subviews should be opened
+- retry counts
+- feature toggles for extraction modes
+
+Do not interpolate dozens of ad hoc strings into the script body.
+
+## Step 6 - Keep the Browser Script Strictly About Extraction
+
+Your browser script should return a plain structured object. Think of it as a tiny page-specific extractor.
+
+Good returned fields:
+
+- page URL
+- page title
+- counts
+- extracted items
+- optional metadata that helps explain extraction behavior
+
+Examples from the current commands:
+
+- `chatgpt-transcript` returns `href`, `title`, `turnCount`, `withActivity`, `activityExported`, `transcript`
+- `kagi-search` returns `query`, `href`, `title`, `waitedMs`, `resultCount`, `results`, `quickAnswer`
+
+Bad responsibilities for the browser script:
+
+- writing Markdown headings
+- deciding CLI output mode
+- flattening everything into a single text blob just because that is easier
+
+The Go layer is where representation choices belong.
+
+## Step 7 - Write One Shared Fetch Function in Go
+
+Every serious browser-side verb should have one shared fetch helper that:
+
+1. validates settings
+2. constructs any URL or target
+3. prepares the script prelude
+4. creates the transport client
+5. acquires or resolves the tab
+6. executes the relevant host tools
+7. parses the result once
+
+This is the center of the command.
+
+Examples:
+
+- `fetchChatGPTTranscript(...)`
+- `fetchKagiSearch(...)`
+
+Why this matters:
+
+- both structured and writer output need the same underlying data
+- you want one place to change transport behavior
+- tests become simpler
+
+Pseudocode:
+
+```text
+fetchThing(ctx, settings):
+  validate settings
+  build embedded JS with SURF_OPTIONS
+  create transport client
+  resolve tab strategy
+  maybe navigate or create tab
+  execute js tool
+  parse structured response
+  return typed data wrapper
+```
+
+If your command has separate fetch logic for Markdown and row output, stop and refactor.
+
+## Step 8 - Parse Once, Then Fan Out
+
+After the host returns, parse the response once and then feed the result into either rows or Markdown.
+
+Current repository helpers:
+
+- `parseResult(...)` in `go/internal/cli/commands/format.go`
+- `extractErrorText(...)` in `go/internal/cli/commands/format.go`
+
+Typical command-local functions:
+
+- `parseKagiSearchResponse(...)`
+- `kagiSearchDataToRows(...)`
+- `renderKagiSearchMarkdown(...)`
+
+The correct layering is:
+
+```text
+raw host response
+  -> parse structured payload
+  -> internal typed wrapper or map
+  -> rows or Markdown
+```
+
+Do not re-parse the same text separately in `RunIntoGlazeProcessor(...)` and `RunIntoWriter(...)`.
+
+## Step 9 - Make It a Real Glazed Command
+
+In this repository, new public verbs should be real Glazed commands.
+
+That means:
+
+1. command description
+2. typed settings struct with `glazed` tags
+3. flags in `cmds.WithFlags(...)`
+4. command and Glazed sections
+5. `RunIntoGlazeProcessor(...)`
+6. optionally `RunIntoWriter(...)`
+
+Typical skeleton:
+
+```go
+type MyCommand struct {
+    *cmds.CommandDescription
+}
+
+type MySettings struct {
+    Query string `glazed:"query"`
+}
+
+var _ cmds.GlazeCommand = (*MyCommand)(nil)
+var _ cmds.WriterCommand = (*MyCommand)(nil)
+```
+
+If the command should support both human-readable output and structured rows, use dual mode.
+
+## Step 10 - Use Dual Mode for Human + Machine Output
+
+For complex verbs, Markdown is often the best default for humans, while rows are better for automation.
+
+The current repository pattern is:
+
+- default writer mode
+- `--with-glaze-output` for rows
+
+Registration pattern in `go/cmd/surf-go/main.go`:
+
+```go
+cobraCmd, err := cli.BuildCobraCommand(cmd,
     cli.WithDualMode(true),
     cli.WithGlazeToggleFlag("with-glaze-output"),
     cli.WithParserConfig(cli.CobraParserConfig{
@@ -181,110 +445,330 @@ cli.BuildCobraCommand(cmd,
 )
 ```
 
-In this repository's Glazed version, this explicit dual-mode setup is important. A command that simply implements both interfaces without dual-mode registration will not behave the way you expect.
+Why this is necessary:
 
-## Step 8 - Test in three layers
+- this repository's Glazed version does not automatically do the right thing if a command implements both writer and glaze interfaces without explicit dual-mode registration
 
-A browser-side verb is not done until it is tested at multiple layers. Each layer catches a different class of failure.
+Use this mode when:
 
-### Unit tests
+- the result is naturally read as a report
+- the same data also benefits from machine-readable rows
+
+Current examples:
+
+- `chatgpt-transcript`
+- `kagi-search`
+
+## Step 11 - Wire the Command into the Root and Help System
+
+Implementation is not complete until the command is registered and documented.
+
+Relevant root file:
+
+- `go/cmd/surf-go/main.go`
+
+Relevant embedded help files:
+
+- `go/pkg/doc/doc.go`
+- `go/pkg/doc/tutorials/01-building-browser-side-verbs.md`
+
+Root-level requirements:
+
+- build or register the command
+- if dual mode, use `cli.BuildCobraCommand(...)` with `cli.WithDualMode(true)`
+- load embedded docs into the help system
+
+The help-system wiring now looks like:
+
+```go
+if err := doc.AddDocToHelpSystem(helpSystem); err != nil {
+    return nil, err
+}
+help_cmd.SetupCobraRootCommand(helpSystem, rootCmd)
+```
+
+If a new command has no help surface and no discoverability, the task is only partially done.
+
+## Step 12 - Test at Three Layers
+
+This is the minimum testing standard for a complex browser verb.
+
+### Layer 1: unit tests
 
 Use unit tests for:
 
-- script prelude generation,
-- response parsing,
-- row shaping,
-- Markdown rendering,
-- and export file rendering.
+- script prelude generation
+- URL construction
+- response parsing
+- row shaping
+- Markdown rendering
+- small helpers such as extracting `tabId` from a tab-creation response
 
-These tests should run fast and not depend on the browser.
+Examples:
 
-### Mock-host integration tests
+- `go/internal/cli/commands/chatgpt_transcript_test.go`
+- `go/internal/cli/commands/kagi_search_test.go`
 
-Use mock socket tests to verify:
+### Layer 2: mock-host integration tests
 
-- the CLI sends the expected host tool,
-- the embedded script prelude contains the right options,
-- and the command wiring stays stable.
+Use mock unix-socket tests in `go/cmd/surf-go/integration_test.go` to verify:
 
-### Real-browser validation
+- the command sends the expected tool sequence
+- the arguments are correct
+- the embedded script prelude contains the expected options
 
-Use real-browser validation to confirm:
+This is especially important for commands like `kagi-search` whose request sequence matters. After the active-tab bug, the integration test now confirms:
 
-- selectors still match,
-- timing is correct,
-- retries behave the way you think they do,
-- and the actual site returns the expected shape.
+1. `tab.new` is sent first when no explicit target exists
+2. `js` is sent second with the expected `SURF_OPTIONS`
 
-Do not skip this layer for commands that manipulate rich web apps.
+### Layer 3: real-browser validation
 
-## Step 9 - Write down what failed, not just what worked
+You still need one real-browser pass. Mock tests do not validate selectors.
 
-Complex browser verbs always collect edge cases during development. If you do not write them down, the next person will rediscover them the hard way.
+Use either:
 
-For `chatgpt-transcript`, the investigation diary captured details such as:
+- `surf-go js` against the real browser session
+- or Playwright for DOM inspection when the extension socket is unavailable
 
-- why backend replay was not the first implementation path,
-- why Activity flyout scraping required matching by duration,
-- and why `EXECUTE_JAVASCRIPT` had to stop mangling template literals.
+For real-browser validation, confirm at least:
 
-A good diary should record:
+- the page selectors still match
+- the scraper returns clean data
+- retries behave correctly
+- the command does not depend on accidental browser state
 
-- failed selectors,
-- timing quirks,
-- protocol surprises,
-- and exactly which behaviors were validated only in the real browser.
+## Step 13 - Keep a Research Trail
 
-## Applying This Process to `kagi-search`
+Every complex browser verb should leave behind a useful trail in the ticket.
 
-`kagi-search` now follows the same sequence in code.
+For the current work, the ticket artifacts include:
 
-### Concrete implementation shape
+- ChatGPT transcript research diary
+- Kagi search research diary
+- ticket-side probe scripts under `ttmp/.../scripts`
 
-1. Navigate to a Kagi search URL for a fixed query.
-2. Wait for the primary results container.
-3. Return a small structured payload with:
-   - title,
-   - URL,
-   - snippet,
-   - result index.
+Why this matters:
 
-### Current command shape
+- future contributors can see what failed
+- site-specific quirks are documented
+- temporary probes do not contaminate production code
 
-Structured rows:
+A good diary records:
 
-```bash
-surf-go kagi-search --query "llm transcript attribution" --with-glaze-output --output yaml
+- working selectors
+- rejected selectors
+- timing behavior
+- dedupe rules
+- what was validated live versus only in tests
+
+## A Concrete Walkthrough: `kagi-search`
+
+This section compresses the actual implementation into a sequence you can reuse.
+
+### 1. define the contract
+
+We wanted:
+
+- query in
+- Kagi results out
+- Markdown by default
+- structured rows optionally
+- no requirement that the user manually open a tab first
+
+### 2. validate the DOM
+
+We used page probes to confirm:
+
+- `main div._0_SRI.search-result`
+- `main div.__srgi`
+- `h3 a[href^="http"]`
+- `._0_DESC.__sri-desc`
+- `.__sri-desc`
+
+### 3. identify the noisy page blocks
+
+We found that Quick Answer on the test page exposed only:
+
+- `Quick Answer`
+- `References`
+- `Continue in Assistant`
+
+That meant:
+
+- include Quick Answer only when it contains substantive text
+- otherwise return `null`
+
+### 4. choose tab behavior
+
+We first used `navigate` directly and discovered the active-tab dependency. The fix was:
+
+- `tab.new` when no explicit tab or window target is supplied
+- `navigate` only when a target is explicitly given
+
+That is the kind of issue you should expect and design around.
+
+### 5. embed the production extractor
+
+The final script lives in:
+
+- `go/internal/cli/commands/scripts/kagi_search.js`
+
+and is embedded with:
+
+```go
+//go:embed scripts/kagi_search.js
+var kagiSearchScript string
 ```
 
-Human-readable Markdown:
+### 6. implement shared fetch and dual-mode output
 
-```bash
-surf-go kagi-search --query "llm transcript attribution"
+Go fetch path:
+
+- build search URL
+- create client
+- create or navigate tab
+- run JS
+- parse once
+
+Go output path:
+
+- rows via `kagiSearchDataToRows(...)`
+- Markdown via `renderKagiSearchMarkdown(...)`
+
+### 7. lock behavior with tests
+
+Tests verify:
+
+- URL building
+- script prelude content
+- row shaping
+- Markdown rendering
+- tab-creation fallback sequence
+
+That is the full lifecycle for a serious browser-side verb.
+
+## Practical Checklist
+
+Before starting:
+
+- decide the user contract
+- decide whether the command owns the tab or reuses it
+- decide whether the result should default to Markdown or rows
+
+During browser research:
+
+- validate selectors in a real page
+- look for duplicates
+- look for page blocks that look useful but are just chrome
+- save probes in the ticket
+
+Before writing Go:
+
+- ensure the page algorithm can be explained step by step
+- move production JS into `go/internal/cli/commands/scripts`
+- embed it with `go:embed`
+
+Before calling it done:
+
+- add unit tests
+- add mock-host integration tests
+- run a real-browser validation pass
+- wire the command into the root
+- make sure `surf-go help <command>` and `surf-go help build-browser-side-verbs` work
+
+## Common Failure Modes
+
+These are the failures you should expect.
+
+### “The script worked in a probe but fails when embedded”
+
+Cause:
+
+- the wrapper or prelude changed the JavaScript shape
+
+Fix:
+
+- compare the embedded script and the probe directly
+- confirm `SURF_OPTIONS` is valid JSON
+- re-run the exact script body through `surf-go js`
+
+### “The command only works if a tab is already open”
+
+Cause:
+
+- the fetch path implicitly relied on active-tab resolution
+
+Fix:
+
+- decide whether the command should create its own tab
+- if yes, do `tab.new` explicitly and capture the resulting `tabId`
+
+### “The page returns something that looks structured but is actually useless”
+
+Cause:
+
+- a visible UI block exposed only labels or shell text
+
+Fix:
+
+- inspect the raw block contents
+- suppress the block unless it contains meaningful payload
+
+### “Rows work but Markdown does not”
+
+Cause:
+
+- the command only implements the glaze path
+
+Fix:
+
+- implement `RunIntoWriter(...)`
+- register the command in dual mode
+
+### “Markdown works but structured rows do not”
+
+Cause:
+
+- the command was registered only as a writer path
+
+Fix:
+
+- confirm `RunIntoGlazeProcessor(...)` exists
+- confirm `cli.WithDualMode(true)` and `cli.WithGlazeToggleFlag("with-glaze-output")` are used
+
+## Minimal Template
+
+This is the smallest useful template for a new complex verb.
+
+```text
+research:
+  use surf-go js to prove selectors and timing
+  save probes in ticket scripts/
+
+production:
+  create go/internal/cli/commands/scripts/my_verb.js
+  embed it with go:embed
+  write buildMyVerbCode(settings)
+  write fetchMyVerb(ctx, settings)
+  write parseMyVerbResponse(resp)
+  write myVerbDataToRows(data)
+  write renderMyVerbMarkdown(data) if dual mode
+  register command in main.go
+
+validation:
+  unit tests
+  mock-host integration test
+  real-browser validation
+  help page and discoverability check
 ```
 
-The implementation uses the same dual-mode pattern as `chatgpt-transcript`: one shared fetch path, Markdown by default, and structured rows behind `--with-glaze-output`.
-
-### What to validate before calling it done
-
-- Result selectors survive a reload.
-- Search results are stable enough to scrape after normal navigation.
-- Non-result UI blocks do not leak into the main output.
-- The page logic behaves predictably when Kagi returns no results, redirects, or partial results.
-
-## Troubleshooting
-
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| The script works in a ticket file but fails once embedded | The worker wrapper or command prelude changed the JavaScript shape | Re-run the embedded script through `surf-go js` and compare the exact wrapped code path |
-| A command returns rows but not the expected Markdown | The command only implements `GlazeCommand` | Add `RunIntoWriter(...)` and register with `cli.WithDualMode(true)` |
-| The Markdown path works but structured rows do not | The command is running in writer mode only | Use `--with-glaze-output` and verify the command was registered in dual mode |
-| Browser automation hangs only in one environment | The wrapper environment is misleading the diagnosis | Re-run the exact browser step from a normal user shell before changing command logic |
-| A page scraper becomes brittle after a site update | Selectors depend on incidental layout details | Rework the browser algorithm around durable anchors and explicit matching logic |
+That template is intentionally boring. Complex browser verbs become maintainable when the structure stays boring and the page-specific complexity stays isolated in the embedded script.
 
 ## See Also
 
-- [build-first-command](glaze help build-first-command) — Baseline Glazed command construction patterns.
-- [writing-help-entries](glaze help writing-help-entries) — Frontmatter and embedding conventions for help pages.
-- [how-to-write-good-documentation-pages](glaze help how-to-write-good-documentation-pages) — Documentation style and structure rules.
-- [chatgpt_transcript.go](/home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/chatgpt_transcript.go) — Current reference implementation of a complex browser-side verb.
+- [kagi_search.go](/home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/kagi_search.go) — compact example of navigate-or-create-tab plus dual-mode output
+- [chatgpt_transcript.go](/home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/internal/cli/commands/chatgpt_transcript.go) — more complex example with subview scraping and export behavior
+- [integration_test.go](/home/manuel/code/others/llms/pi/nicobailon/surf-cli/go/cmd/surf-go/integration_test.go) — mock-host patterns for validating command tool sequences
+- [writing-help-entries](glaze help writing-help-entries) — Glazed help frontmatter and embedding conventions
+- [how-to-write-good-documentation-pages](glaze help how-to-write-good-documentation-pages) — style guidance for help pages
