@@ -34,6 +34,7 @@ func TestKagiSearchDataToRowsExpandsResults(t *testing.T) {
 		"resultCount": 2,
 		"waitedMs":    500,
 		"maxResults":  10,
+		"noResults":   false,
 		"quickAnswer": map[string]any{"title": "Quick Answer", "text": "A summary"},
 		"results": []any{
 			map[string]any{"index": 1, "title": "Paper A", "url": "https://example.com/a", "snippet": "Snippet A"},
@@ -58,6 +59,7 @@ func TestRenderKagiSearchMarkdown(t *testing.T) {
 		"href":        "https://kagi.com/search?q=llm+transcript+attribution",
 		"title":       "llm transcript attribution - Kagi Search",
 		"resultCount": 1,
+		"noResults":   false,
 		"quickAnswer": map[string]any{"title": "Quick Answer", "text": "A summary"},
 		"results": []any{
 			map[string]any{

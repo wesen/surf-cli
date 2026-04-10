@@ -22,11 +22,6 @@ async function waitForCondition(predicate, timeoutMs, intervalMs = 250) {
 const RESULTS_SELECTOR = 'main div._0_SRI.search-result, main div.__srgi';
 const QUICK_ANSWER_SELECTOR = 'main .qa-container-box .qa-content';
 
-const ready = await waitForCondition(() => document.querySelector(RESULTS_SELECTOR), 15000);
-if (!ready) {
-  throw new Error('No Kagi search results found');
-}
-
 function extractQuickAnswer() {
   const node = document.querySelector(QUICK_ANSWER_SELECTOR);
   if (!node) {
@@ -52,6 +47,14 @@ function extractQuickAnswer() {
 
 function resultBlocks() {
   return Array.from(document.querySelectorAll(RESULTS_SELECTOR));
+}
+
+function detectNoResults() {
+  const bodyText = normalizeText(document.body?.innerText || '');
+  if (!bodyText) {
+    return false;
+  }
+  return /\bno results\b/i.test(bodyText) || /\b0 results\b/i.test(bodyText);
 }
 
 function extractResults(limit) {
@@ -105,9 +108,32 @@ function extractResults(limit) {
   return results;
 }
 
+const ready = await waitForCondition(() => {
+  const results = extractResults(maxResults);
+  if (results.length > 0) {
+    return {
+      results,
+      quickAnswer: extractQuickAnswer(),
+      noResults: false,
+    };
+  }
+  if (detectNoResults()) {
+    return {
+      results: [],
+      quickAnswer: extractQuickAnswer(),
+      noResults: true,
+    };
+  }
+  return null;
+}, 20000);
+
+if (!ready) {
+  throw new Error('No Kagi search results found');
+}
+
 const query = new URL(location.href).searchParams.get('q') || '';
-const quickAnswer = extractQuickAnswer();
-const results = extractResults(maxResults);
+const quickAnswer = ready.value.quickAnswer;
+const results = ready.value.results;
 
 return {
   query,
@@ -116,6 +142,7 @@ return {
   waitedMs: ready.waitedMs,
   maxResults,
   quickAnswer,
+  noResults: ready.value.noResults,
   resultCount: results.length,
   results,
 };
