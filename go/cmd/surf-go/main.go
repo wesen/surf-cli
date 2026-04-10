@@ -14,6 +14,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/help"
 	help_cmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	"github.com/nicobailon/surf-cli/gohost/internal/cli/commands"
+	"github.com/nicobailon/surf-cli/gohost/pkg/doc"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +28,9 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 		},
 	}
 
+	if err := doc.AddDocToHelpSystem(helpSystem); err != nil {
+		return nil, err
+	}
 	help_cmd.SetupCobraRootCommand(helpSystem, rootCmd)
 	_ = logging.AddLoggingSectionToRootCommand(rootCmd, "surf-go")
 	rootCmd.AddCommand(newInstallCommand())
@@ -57,6 +61,23 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 		return nil, err
 	}
 	rootCmd.AddCommand(cobraChatGPTTranscript)
+
+	kagiSearchCmd, err := commands.NewKagiSearchCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraKagiSearch, err := cli.BuildCobraCommand(kagiSearchCmd,
+		cli.WithDualMode(true),
+		cli.WithGlazeToggleFlag("with-glaze-output"),
+		cli.WithParserConfig(cli.CobraParserConfig{
+			ShortHelpSections: []string{schema.DefaultSlug},
+			MiddlewaresFunc:   cli.CobraCommandDefaultMiddlewares,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	rootCmd.AddCommand(cobraKagiSearch)
 
 	rawCmd, err := commands.NewToolRawCommand()
 	if err != nil {

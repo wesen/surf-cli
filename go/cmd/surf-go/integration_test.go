@@ -275,3 +275,108 @@ func TestSurfGoChatGPTTranscriptCommandUsesJSAgainstMockHost(t *testing.T) {
 		t.Fatalf("mock host failed: %v", err)
 	}
 }
+
+func TestSurfGoKagiSearchCommandNavigatesThenUsesJSAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		for i := 0; i < 2; i++ {
+			conn, err := ln.Accept()
+			if err != nil {
+				done <- err
+				return
+			}
+
+			reader := bufio.NewReader(conn)
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+
+			var req map[string]any
+			if err := json.Unmarshal(line, &req); err != nil {
+				_ = conn.Close()
+				done <- err
+				return
+			}
+			params := req["params"].(map[string]any)
+
+			switch i {
+			case 0:
+				if params["tool"] != "navigate" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected first tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				if args["url"] != "https://kagi.com/search?q=llm+transcript+attribution" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected navigate url: %v", args["url"])
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"ok":true}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			case 1:
+				if params["tool"] != "js" {
+					_ = conn.Close()
+					done <- fmt.Errorf("unexpected second tool: %v", params["tool"])
+					return
+				}
+				args := params["args"].(map[string]any)
+				code, _ := args["code"].(string)
+				if !strings.Contains(code, `const SURF_OPTIONS = {"maxResults":3};`) {
+					_ = conn.Close()
+					done <- fmt.Errorf("missing kagi search options prelude: %q", code)
+					return
+				}
+				resp := map[string]any{
+					"type": "tool_response",
+					"id":   req["id"],
+					"result": map[string]any{
+						"content": []map[string]any{{"type": "text", "text": `{"query":"llm transcript attribution","href":"https://kagi.com/search?q=llm+transcript+attribution","title":"llm transcript attribution - Kagi Search","waitedMs":500,"maxResults":3,"resultCount":1,"results":[{"index":1,"title":"Paper A","url":"https://example.com/a","snippet":"Snippet A"}]}`}},
+					},
+				}
+				b, _ := json.Marshal(resp)
+				_, err = conn.Write(append(b, '\n'))
+			}
+
+			_ = conn.Close()
+			if err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"kagi-search", "--query", "llm transcript attribution", "--max-results", "3", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
