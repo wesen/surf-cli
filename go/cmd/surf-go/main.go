@@ -55,6 +55,26 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	cobraChatGPTTranscript.Use = "transcript"
 
+	claudeAskCmd, err := commands.NewClaudeCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraClaudeAsk, err := buildGlazedCommand(claudeAskCmd)
+	if err != nil {
+		return nil, err
+	}
+	cobraClaudeAsk.Use = "ask"
+
+	claudeTranscriptCmd, err := commands.NewClaudeTranscriptCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraClaudeTranscript, err := buildDualModeCommand(claudeTranscriptCmd)
+	if err != nil {
+		return nil, err
+	}
+	cobraClaudeTranscript.Use = "transcript"
+
 	kagiSearchCmd, err := commands.NewKagiSearchCommand()
 	if err != nil {
 		return nil, err
@@ -96,6 +116,10 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	chatGPTGroup := &cobra.Command{Use: "chatgpt", Short: "ChatGPT commands"}
 	chatGPTGroup.AddCommand(cobraChatGPT, cobraChatGPTTranscript)
 	rootCmd.AddCommand(chatGPTGroup)
+
+	claudeGroup := &cobra.Command{Use: "claude", Short: "Claude commands"}
+	claudeGroup.AddCommand(cobraClaudeAsk, cobraClaudeTranscript)
+	rootCmd.AddCommand(claudeGroup)
 
 	kagiGroup := &cobra.Command{Use: "kagi", Short: "Kagi commands"}
 	kagiGroup.AddCommand(cobraKagiSearch, cobraKagiAssistant)
