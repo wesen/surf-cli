@@ -1,0 +1,35 @@
+# Tasks
+
+- [x] 1. Add ticket bookkeeping and relate the current frame-plumbing source files to the design doc and diary.
+- [x] 2. Create a first exploratory frame diagnostic script in the ticket `scripts/` directory that inventories visible iframe elements from the main page DOM.
+- [x] 3. Implement service-worker support for a new `FRAME_DIAGNOSE` message that collects:
+  - DOM iframe inventory
+  - `chrome.webNavigation.getAllFrames` output
+  - CDP `Page.getFrameTree` output
+- [x] 4. Add extension-frame reachability probing for child frames using a lightweight message such as `PING`.
+- [x] 5. Add Go router mapping for `frame.diagnose`.
+- [x] 6. Add a real `surf-go frame diagnose` Glazed command with structured output and useful human-readable rendering.
+- [ ] 7. Validate `frame diagnose` on the Claude artifact page and store any exploratory scripts under the ticket `scripts/` directory with ordered numeric prefixes.
+- [ ] 8. Enrich `GET_FRAME_BY_SELECTOR` to return more metadata:
+  - iframe `src`
+  - `title`
+  - DOM index
+  - `sandbox`
+  - `allow`
+  - optional bounding rect
+- [ ] 9. Improve `FRAME_SWITCH` matching logic to correlate selector metadata against extension/CDP frame inventories more robustly than exact URL matching.
+- [ ] 10. Introduce an explicit resolved-frame target structure that can carry both extension-frame ids and CDP frame ids.
+- [ ] 11. Update frame-dependent command routing to use the resolved-frame target rather than a bare integer `frameContexts` entry.
+- [ ] 12. Improve the content-script-not-loaded path for child frames:
+  - precise frame-aware errors
+  - optional on-demand injection if feasible
+  - diagnostic output if injection is impossible
+- [ ] 13. Revalidate the Claude artifact widget case:
+  - `frame diagnose`
+  - `frame switch --selector`
+  - `page read` in selected child frame
+  - `frame eval` in selected child frame
+- [ ] 14. Update documentation and diary after each significant step.
+- [ ] 15. Run `go test ./...` or the narrowest relevant package set after each behavior change and record any failures verbatim in the diary.
+- [ ] 16. Run `docmgr doctor --ticket SURF-20260411-R8 --stale-after 30` before final handoff.
+- [ ] 17. Upload the final ticket bundle to reMarkable under `/ai/2026/04/11/SURF-20260411-R8`.

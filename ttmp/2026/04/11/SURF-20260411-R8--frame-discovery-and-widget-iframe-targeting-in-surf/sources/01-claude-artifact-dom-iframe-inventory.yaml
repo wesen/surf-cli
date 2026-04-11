@@ -1,0 +1,62 @@
+href: https://claude.ai/chat/291e04b6-370f-40cf-b541-5a13004cea80
+iframeCount: 4
+iframes:
+    - allow: fullscreen *; clipboard-write *
+      className: ""
+      domIndex: 0
+      id: ""
+      name: ""
+      rect:
+        height: 1186
+        width: 720
+        x: 374.890625
+        "y": 275.953125
+      sandbox: allow-scripts allow-same-origin allow-forms
+      src: https://6ae93f73233bdffea492b6b8571cc222.claudemcpcontent.com/mcp_apps?connect-src=https%3A%2F%2Fesm.sh+https%3A%2F%2Fcdnjs.cloudflare.com+https%3A%2F%2Fcdn.jsdelivr.net+https%3A%2F%2Funpkg.com&resource-src=https%3A%2F%2Fesm.sh+https%3A%2F%2Fcdnjs.cloudflare.com+https%3A%2F%2Fcdn.jsdelivr.net+https%3A%2F%2Funpkg.com+https%3A%2F%2Fassets.claude.ai&dev=true
+      title: Art of insight landing page
+    - allow: ""
+      className: ""
+      domIndex: 1
+      id: ""
+      name: ""
+      rect:
+        height: 0
+        width: 0
+        x: 0
+        "y": 0
+      sandbox: allow-scripts allow-same-origin
+      src: https://a.claude.ai/isolated-segment.html?v=2f582ab1fd
+      title: Marketing analytics
+    - allow: ""
+      className: ""
+      domIndex: 2
+      id: ""
+      name: ""
+      rect:
+        height: 1
+        width: 1
+        x: 0
+        "y": 0
+      sandbox: ""
+      src: ""
+      title: ""
+    - allow: ""
+      className: ""
+      domIndex: 3
+      id: intercom-frame
+      name: ""
+      rect:
+        height: 1
+        width: 1
+        x: 0
+        "y": 0
+      sandbox: ""
+      src: ""
+      title: Intercom
+notes:
+    - This script runs in the main page context only.
+    - It inventories visible iframe elements but does not attempt cross-origin DOM access.
+title: Art of insight landing page - Claude
+
+---
+

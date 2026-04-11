@@ -296,6 +296,15 @@ func addRemainingCoreCommands(root *cobra.Command) error {
 	}); err != nil {
 		return err
 	}
+	frameDiagnoseCmd, err := commands.NewFrameDiagnoseCommand()
+	if err != nil {
+		return err
+	}
+	cobraFrameDiagnose, err := buildDualModeCommand(frameDiagnoseCmd)
+	if err != nil {
+		return err
+	}
+	frameCmd.AddCommand(cobraFrameDiagnose)
 	root.AddCommand(frameCmd)
 
 	dialogCmd := &cobra.Command{Use: "dialog", Short: "Dialog commands"}

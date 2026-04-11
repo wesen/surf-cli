@@ -11,6 +11,93 @@ const activeStreamTabs = new Map<number, number>();
 // When frame.switch is called, subsequent content script messages go to that frame
 const frameContexts = new Map<number, number>();
 
+async function collectDomIframeInventory(
+  cdp: CDPController,
+  tabId: number
+): Promise<{
+  href: string;
+  title: string;
+  iframeCount: number;
+  domIframes: Array<Record<string, unknown>>;
+}> {
+  const expression = `JSON.stringify((() => {
+    const iframes = Array.from(document.querySelectorAll('iframe')).map((el, domIndex) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        domIndex,
+        src: el.src || '',
+        title: el.title || '',
+        name: el.getAttribute('name') || '',
+        id: el.id || '',
+        sandbox: el.getAttribute('sandbox') || '',
+        allow: el.getAttribute('allow') || '',
+        className: (el.className || '').toString().slice(0, 200),
+        rect: {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        },
+      };
+    });
+    return {
+      href: location.href,
+      title: document.title,
+      iframeCount: iframes.length,
+      domIframes: iframes,
+    };
+  })())`;
+
+  const result = await cdp.evaluateScript(tabId, expression);
+  if (result.exceptionDetails) {
+    throw new Error(result.exceptionDetails.text || result.exceptionDetails.exception?.description || "Failed to collect DOM iframe inventory");
+  }
+
+  const rawValue = result.result?.value;
+  if (typeof rawValue !== "string") {
+    throw new Error("Unexpected DOM iframe inventory result shape");
+  }
+
+  const parsed = JSON.parse(rawValue) as {
+    href: string;
+    title: string;
+    iframeCount: number;
+    domIframes: Array<Record<string, unknown>>;
+  };
+
+  return parsed;
+}
+
+async function collectExtensionFrameDiagnostics(tabId: number): Promise<Array<Record<string, unknown>>> {
+  const chromeFrames = await chrome.webNavigation.getAllFrames({ tabId });
+  if (!chromeFrames) {
+    return [];
+  }
+
+  const diagnostics: Array<Record<string, unknown>> = [];
+  for (const frame of chromeFrames) {
+    const entry: Record<string, unknown> = {
+      extensionFrameId: frame.frameId,
+      parentFrameId: frame.parentFrameId,
+      url: frame.url,
+      errorOccurred: frame.errorOccurred || false,
+    };
+
+    try {
+      const ping = await chrome.tabs.sendMessage(tabId, { type: "PING" }, { frameId: frame.frameId });
+      entry["contentScriptReachable"] = true;
+      entry["contentScript"] = ping || {};
+    } catch (err) {
+      entry["contentScriptReachable"] = false;
+      entry["contentScriptError"] = err instanceof Error ? err.message : String(err);
+    }
+
+    diagnostics.push(entry);
+  }
+
+  return diagnostics;
+}
+
 // Helper to get the frame ID for content script messaging
 function getFrameIdForTab(tabId: number): number {
   return frameContexts.get(tabId) ?? 0;
@@ -1787,6 +1874,48 @@ export async function handleMessage(
       frameContexts.delete(tabId);
       
       return { success: true, message: "Returned to main frame" };
+    }
+
+    case "FRAME_DIAGNOSE": {
+      if (!tabId) throw new Error("No tabId provided");
+
+      const page = await collectDomIframeInventory(cdp, tabId);
+      const extensionFrames = await collectExtensionFrameDiagnostics(tabId);
+      const cdpFramesResult = await cdp.getFrames(tabId);
+      if (!cdpFramesResult.success) {
+        throw new Error(cdpFramesResult.error || "Failed to collect CDP frames");
+      }
+
+      const cdpFrames = (cdpFramesResult.frames || []).map((frame) => ({
+        cdpFrameId: frame.frameId,
+        parentId: frame.parentId,
+        name: frame.name,
+        url: frame.url,
+      }));
+
+      const warnings: string[] = [];
+      const domIframeCount = Array.isArray(page.domIframes) ? page.domIframes.length : 0;
+      const childExtensionCount = extensionFrames.filter((frame) => Number(frame["extensionFrameId"]) !== 0).length;
+      const childCDPCount = cdpFrames.filter((frame) => frame.parentId).length;
+      if (domIframeCount !== childExtensionCount) {
+        warnings.push(`DOM iframe count (${domIframeCount}) differs from extension child-frame count (${childExtensionCount})`);
+      }
+      if (domIframeCount !== childCDPCount) {
+        warnings.push(`DOM iframe count (${domIframeCount}) differs from CDP child-frame count (${childCDPCount})`);
+      }
+
+      return {
+        success: true,
+        mainPage: {
+          href: page.href,
+          title: page.title,
+          iframeCount: page.iframeCount,
+        },
+        domIframes: page.domIframes,
+        extensionFrames,
+        cdpFrames,
+        warnings,
+      };
     }
 
     case "EVALUATE_IN_FRAME": {

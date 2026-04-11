@@ -242,6 +242,8 @@ func MapToolToMessage(req ToolRequest) (map[string]any, error) {
 		return base(map[string]any{"type": "SCROLL_TO_ELEMENT", "ref": a["ref"]}), nil
 	case "frame.list":
 		return base(map[string]any{"type": "GET_FRAMES"}), nil
+	case "frame.diagnose":
+		return base(map[string]any{"type": "FRAME_DIAGNOSE"}), nil
 	case "frame.switch":
 		msg := map[string]any{"type": "FRAME_SWITCH", "selector": a["selector"], "name": a["name"]}
 		if idx, ok := toInt(a["index"]); ok {

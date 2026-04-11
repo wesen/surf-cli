@@ -1481,6 +1481,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse(result);
       break;
     }
+    case "PING": {
+      sendResponse({
+        ok: true,
+        href: location.href,
+        title: document.title,
+        frameName: window.name || "",
+      });
+      break;
+    }
     case "GET_FRAME_BY_SELECTOR": {
       try {
         const iframe = document.querySelector(message.selector) as HTMLIFrameElement;

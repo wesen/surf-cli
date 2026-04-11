@@ -1004,3 +1004,70 @@ func TestSurfGoGmailSearchCommandCreatesTabThenUsesJSAgainstMockHost(t *testing.
 		t.Fatalf("mock host failed: %v", err)
 	}
 }
+
+func TestSurfGoFrameDiagnoseCommandUsesDiagnoseToolAgainstMockHost(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "surf.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		if err != nil {
+			done <- err
+			return
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			done <- err
+			return
+		}
+
+		var req map[string]any
+		if err := json.Unmarshal(line, &req); err != nil {
+			done <- err
+			return
+		}
+		params := req["params"].(map[string]any)
+		if params["tool"] != "frame.diagnose" {
+			done <- fmt.Errorf("unexpected tool: %v", params["tool"])
+			return
+		}
+
+		resp := map[string]any{
+			"type": "tool_response",
+			"id":   req["id"],
+			"result": map[string]any{
+				"content": []map[string]any{{
+					"type": "text",
+					"text": `{"mainPage":{"href":"https://claude.ai/chat/abc","title":"Claude","iframeCount":2},"domIframes":[{"domIndex":0,"src":"https://widget.example","title":"Widget"}],"extensionFrames":[{"extensionFrameId":0,"url":"https://claude.ai/chat/abc","contentScriptReachable":true}],"cdpFrames":[{"cdpFrameId":"frame-1","url":"https://claude.ai/chat/abc"}],"warnings":["count mismatch"]}`,
+				}},
+			},
+		}
+		b, _ := json.Marshal(resp)
+		_, err = conn.Write(append(b, '\n'))
+		done <- err
+	}()
+
+	root, err := newRootCommand(help.NewHelpSystem())
+	if err != nil {
+		t.Fatalf("failed to build root: %v", err)
+	}
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"frame", "diagnose", "--socket-path", sock, "--with-glaze-output", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("command failed: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("mock host failed: %v", err)
+	}
+}
