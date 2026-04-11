@@ -288,12 +288,118 @@ function getAssistantNodes() {
   );
 }
 
-function getLatestAssistantText() {
+function getLatestAssistantNode() {
   const nodes = getAssistantNodes();
-  if (nodes.length === 0) {
+  return nodes.length > 0 ? nodes[nodes.length - 1] : null;
+}
+
+function dedupeLinks(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    const key = `${item.href}::${item.text}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+async function expandSearchWebSection(node) {
+  if (!node) {
+    return null;
+  }
+  const button = Array.from(node.querySelectorAll('button')).find((el) =>
+    /searched the web/i.test(
+      `${normalizeText(el.innerText || el.textContent)} ${normalizeText(el.getAttribute('aria-label'))}`
+    )
+  );
+  if (!button) {
+    return null;
+  }
+  if (button.getAttribute('aria-expanded') !== 'true') {
+    button.click();
+    await sleep(600);
+  }
+
+  let container = button.parentElement;
+  while (container && container !== node) {
+    if (
+      container.querySelector('div[class*="transition-[grid-template-rows]"]') ||
+      container.querySelector('div.border-\\[0\\.5px\\]') ||
+      container.querySelector('a[href]')
+    ) {
+      return { button, container };
+    }
+    container = container.parentElement;
+  }
+  return { button, container: node };
+}
+
+async function extractSearchWeb(node) {
+  const expanded = await expandSearchWebSection(node);
+  if (!expanded) {
+    return null;
+  }
+  const { button, container } = expanded;
+  const results = dedupeLinks(
+    Array.from(container.querySelectorAll('a[href]')).map((a) => ({
+      href: a.href,
+      text: normalizeText(a.innerText || a.textContent),
+      host: normalizeText(
+        a.querySelector('.text-xs, .text-text-400')?.innerText ||
+          a.querySelector('.text-text-400')?.textContent ||
+          ''
+      ),
+    }))
+  ).filter((item) => item.text);
+  const queries = Array.from(container.querySelectorAll('button'))
+    .map((el) => normalizeText(el.innerText || el.textContent))
+    .filter((text, index, items) => text && text !== normalizeText(button.innerText || button.textContent) && items.indexOf(text) === index);
+  return {
+    label: normalizeText(button.innerText || button.textContent),
+    expanded: button.getAttribute('aria-expanded') === 'true',
+    text: normalizeText(container.innerText || container.textContent),
+    results,
+    queries,
+  };
+}
+
+async function extractCitations(node) {
+  return dedupeLinks(
+    Array.from(node.querySelectorAll('a[href]')).map((a) => ({
+      href: a.href,
+      text: normalizeText(a.innerText || a.textContent),
+      parentText: normalizeText(a.parentElement?.innerText || a.parentElement?.textContent),
+    }))
+  ).filter((item) => item.text);
+}
+
+function hasCompletedAssistantActions(node) {
+  if (!node) {
+    return false;
+  }
+  let cur = node;
+  for (let depth = 0; cur && depth < 4; depth += 1, cur = cur.parentElement) {
+    if (
+      cur.querySelector(
+        '[data-testid="action-bar-copy"], [data-testid="action-bar-retry"], [aria-label="Copy"], [aria-label="Retry"], [aria-label="Edit"]'
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getLatestAssistantText() {
+  const node = getLatestAssistantNode();
+  if (!node) {
     return '';
   }
-  return normalizeText(nodes[nodes.length - 1].innerText || nodes[nodes.length - 1].textContent || '');
+  return normalizeText(node.innerText || node.textContent || '');
 }
 
 function getConversationTitle() {
@@ -310,17 +416,23 @@ async function waitForResponse(timeoutMs) {
   let lastText = '';
   let stableCycles = 0;
   while (Date.now() - started < timeoutMs) {
-    const text = getLatestAssistantText();
+    const node = getLatestAssistantNode();
+    const text = node ? normalizeText(node.innerText || node.textContent || '') : '';
     const sendVisible = !!getSendButton();
+    const completedActionsVisible = hasCompletedAssistantActions(node);
     if (text) {
       if (text === lastText) {
         stableCycles += 1;
       } else {
         stableCycles = 0;
       }
-      if (sendVisible && stableCycles >= 2) {
+      if ((completedActionsVisible || sendVisible) && stableCycles >= 2) {
+        const citations = await extractCitations(node);
+        const searchWeb = await extractSearchWeb(node);
         return {
           text,
+          citations,
+          searchWeb,
           waitedMs: Date.now() - started,
         };
       }
@@ -396,6 +508,8 @@ return {
   prompt,
   response: response.text,
   responseLength: response.text.length,
+  citations: response.citations || [],
+  searchWeb: response.searchWeb || null,
   waitedMs: response.waitedMs,
   createdFrom: CLAUDE_URL,
 };

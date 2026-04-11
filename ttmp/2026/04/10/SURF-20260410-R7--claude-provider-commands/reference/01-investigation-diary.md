@@ -33,3 +33,29 @@
   - list all currently available models with `--list-models`
 - Live `claude ask --list-models` now reports the full discovered model set plus current thinking mode.
 - Remaining separate issue: live prompt submission can still time out in the response wait loop even after the message is sent. That is a response-polling problem, not a model-selection problem.
+
+## 2026-04-11 - citation links and searched-the-web export
+
+- Probed the live Claude chat `4991bdb0-f662-4300-8448-02569afaf2ca` on 2026-04-11.
+- Verified that assistant responses expose direct citation links as normal `a[href]` elements inside the outermost `div.font-claude-response` node.
+- Verified that the `Searched the web` control is a collapsible button inside the assistant subtree.
+- Verified that clicking the button expands a nested results panel containing:
+  - the search query header
+  - result count
+  - per-result links and host labels
+- Updated `claude transcript` to expand `Searched the web` sections before extraction and attach a structured `searchWeb` object per assistant turn.
+- Updated `claude ask` to return `citations` and `searchWeb` metadata for the completed response.
+- Verified that Claude completion should not rely on the send button becoming visible again. On completed responses, the reliable marker is the assistant action bar (`Copy`, `Retry`, `Edit`) within the response node.
+
+## 2026-04-11 - long Claude ask completion fixed
+
+- Reproduced the long-response hang with a web-backed Claude answer in a tmux session.
+- Confirmed the response text and citation links were present in the tab while the CLI still waited.
+- Found the root cause: the completion check looked for action buttons inside the inner `div.font-claude-response` node, but Claude mounts the completed-response action bar (`Copy`, `Retry`, `Edit`) on an ancestor wrapper.
+- Updated the completion check to search the assistant wrapper chain instead of only the inner response node.
+- Re-ran the long web-backed prompt in tmux and confirmed that `claude ask` now exits successfully with:
+  - `response`
+  - `citations`
+  - `searchWeb`
+  - `waitedMs`
+- Observed successful completion on chat `33a970e5-e68e-4711-bc03-6d1b220d0c61` with `waitedMs: 14002`.

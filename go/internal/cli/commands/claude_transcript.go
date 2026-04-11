@@ -33,13 +33,13 @@ var _ cmds.GlazeCommand = (*ClaudeTranscriptCommand)(nil)
 var _ cmds.WriterCommand = (*ClaudeTranscriptCommand)(nil)
 
 type ClaudeTranscriptSettings struct {
-	ExportFile  string `glazed:"export-file"`
+	ExportFile   string `glazed:"export-file"`
 	ExportFormat string `glazed:"export-format"`
-	Socket      string `glazed:"socket-path"`
-	TimeoutMS   int    `glazed:"timeout-ms"`
-	TabID       int64  `glazed:"tab-id"`
-	WindowID    int64  `glazed:"window-id"`
-	DebugSocket bool   `glazed:"debug-socket"`
+	Socket       string `glazed:"socket-path"`
+	TimeoutMS    int    `glazed:"timeout-ms"`
+	TabID        int64  `glazed:"tab-id"`
+	WindowID     int64  `glazed:"window-id"`
+	DebugSocket  bool   `glazed:"debug-socket"`
 }
 
 type claudeTranscriptData struct {
@@ -226,6 +226,11 @@ func renderClaudeTranscriptMarkdown(data map[string]any) string {
 		b.WriteString(model)
 		b.WriteString("\n")
 	}
+	if thinkingMode, _ := data["currentThinkingMode"].(string); thinkingMode != "" {
+		b.WriteString("- Thinking mode: ")
+		b.WriteString(thinkingMode)
+		b.WriteString("\n")
+	}
 	items, _ := data["transcript"].([]any)
 	if len(items) == 0 {
 		b.WriteString("\n_No transcript turns found._\n")
@@ -240,12 +245,86 @@ func renderClaudeTranscriptMarkdown(data map[string]any) string {
 		text, _ := m["text"].(string)
 		index := fmt.Sprintf("%v", m["index"])
 		b.WriteString("\n## ")
-		b.WriteString(strings.Title(role))
+		if role != "" {
+			b.WriteString(strings.ToUpper(role[:1]))
+			if len(role) > 1 {
+				b.WriteString(role[1:])
+			}
+		} else {
+			b.WriteString("Turn")
+		}
 		b.WriteString(" ")
 		b.WriteString(index)
 		b.WriteString("\n\n")
 		b.WriteString(text)
 		b.WriteString("\n")
+		if citations, _ := m["citations"].([]any); len(citations) > 0 {
+			b.WriteString("\n### Citations\n\n")
+			for _, citation := range citations {
+				cm, ok := citation.(map[string]any)
+				if !ok {
+					continue
+				}
+				label, _ := cm["text"].(string)
+				href, _ := cm["href"].(string)
+				if label == "" {
+					label = href
+				}
+				b.WriteString("- ")
+				if href != "" {
+					b.WriteString(label)
+					b.WriteString(": ")
+					b.WriteString(href)
+				} else {
+					b.WriteString(label)
+				}
+				b.WriteString("\n")
+			}
+		}
+		if searchWeb, _ := m["searchWeb"].(map[string]any); searchWeb != nil {
+			b.WriteString("\n### Searched The Web\n\n")
+			if label, _ := searchWeb["label"].(string); label != "" {
+				b.WriteString("- Label: ")
+				b.WriteString(label)
+				b.WriteString("\n")
+			}
+			if queries, _ := searchWeb["queries"].([]any); len(queries) > 0 {
+				b.WriteString("- Queries:\n")
+				for _, query := range queries {
+					b.WriteString("  - ")
+					b.WriteString(fmt.Sprintf("%v", query))
+					b.WriteString("\n")
+				}
+			}
+			if results, _ := searchWeb["results"].([]any); len(results) > 0 {
+				b.WriteString("- Results:\n")
+				for _, result := range results {
+					rm, ok := result.(map[string]any)
+					if !ok {
+						continue
+					}
+					label, _ := rm["text"].(string)
+					href, _ := rm["href"].(string)
+					host, _ := rm["host"].(string)
+					b.WriteString("  - ")
+					if label != "" {
+						b.WriteString(label)
+					} else {
+						b.WriteString(href)
+					}
+					if host != "" {
+						b.WriteString(" [")
+						b.WriteString(host)
+						b.WriteString("]")
+					}
+					if href != "" {
+						b.WriteString(": ")
+						b.WriteString(href)
+					}
+					b.WriteString("\n")
+				}
+			}
+		}
 	}
 	return b.String()
 }
