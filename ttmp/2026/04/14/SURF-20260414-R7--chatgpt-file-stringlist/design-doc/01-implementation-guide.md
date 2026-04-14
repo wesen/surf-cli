@@ -7,155 +7,158 @@ Ticket: SURF-20260414-R7
 
 ## Overview
 
-Change the `--file` flag from `fields.TypeString` to `fields.TypeStringList`, allowing users to specify multiple files via repeated flags: `--file file1.txt --file file2.txt`.
+Changed the `--file` flag from `fields.TypeString` to `fields.TypeStringList`, allowing users to specify multiple files via repeated flags: `--file file1.txt --file file2.txt`.
 
-## Current State
+## Final Implementation
 
-### Flag Definition (CLI)
+### CLI: `go/internal/cli/commands/chatgpt.go`
+
+**ChatGPTSettings struct** — single change:
 ```go
-// chatgpt.go
-type ChatGPTSettings struct {
-    File string `glazed:"file"`  // single string
+// Before
+File string `glazed:"file"`
+
+// After
+Files []string `glazed:"file"`  // Note: Glazed tag unchanged so callers use same flag name
+```
+
+**Flag definition**:
+```go
+fields.New("file", fields.TypeStringList, fields.WithHelp(
+    "File(s) to attach before sending the prompt. "+
+    "Specify multiple files with repeated --file flags "+
+    "(e.g., --file a.txt --file b.txt). "+
+    "Backward compatible with single file paths."))
+```
+
+**Tool args**:
+```go
+// Before
+if s.File != "" {
+    toolArgs["file"] = s.File
 }
 
-fields.New("file", fields.TypeString, ...)  // in NewChatGPTCommand()
-```
-
-### Message Passing (CLI → Provider)
-```go
-// chatgpt.go RunIntoGlazeProcessor
-toolArgs["file"] = s.File  // single string
-```
-
-### Provider Parsing
-```go
-// providers/chatgpt.go parseChatGPTRequest
-File: strings.TrimSpace(asString(args["file"])),  // single string
-
-// providers/chatgpt.go uploadFiles
-files := splitFileList(rawFiles)  // already splits by comma internally
-// But: this is called with a single string, so comma-split is the only path
-```
-
-### Provider Upload
-```go
-// providers/chatgpt.go splitFileList
-func splitFileList(raw string) []string {
-    parts := strings.Split(raw, ",")
-    // ... already handles comma-separated input
-}
-```
-
-## Target State
-
-The flag accepts multiple values, each being a file path. The provider receives a list of file paths.
-
-### Flag Definition (CLI)
-```go
-type ChatGPTSettings struct {
-    Files []string `glazed:"file"`  // string list
-}
-
-fields.New("file", fields.TypeStringList, ...)  // in NewChatGPTCommand()
-```
-
-### Message Passing (CLI → Provider)
-```go
-// chatgpt.go RunIntoGlazeProcessor
+// After
 if len(s.Files) > 0 {
-    toolArgs["files"] = s.Files  // pass as list
+    toolArgs["files"] = s.Files  // Key changed to "files" (list)
 }
 ```
 
-### Provider Parsing
+### Provider: `go/internal/host/providers/chatgpt.go`
+
+**ChatGPTRequest struct**:
 ```go
-// providers/chatgpt.go parseChatGPTRequest
-Files: toStringArray(args["files"]),  // handles []string, []any, string
+// Before
+File string
+
+// After
+Files []string
 ```
 
-### Provider Upload (no change needed)
+**New helpers added** (local duplicates of router helpers):
+
 ```go
-// The existing uploadFiles and splitFileList already handle []string
-func (b *chatGPTBridge) uploadFiles(ctx context.Context, files []string) error {
-    // No change needed — already accepts []string
-}
+// Converts any value to []string — handles nil, string (comma-split), []string, []any
+func toStringArray(v any) []string { ... }
 
-// The rawFiles param becomes files []string, we remove splitFileList call
-```
-
-## Tasks
-
-### Task 1: Update CLI Settings Struct
-**File**: `go/internal/cli/commands/chatgpt.go`
-**Change**: `File string` → `Files []string`
-**Breaking**: No — callers using `--file path.txt` still work with Glazed's string-to-stringlist coercion
-
-### Task 2: Update Flag Definition
-**File**: `go/internal/cli/commands/chatgpt.go`
-**Change**: `fields.TypeString` → `fields.TypeStringList`
-**Help text**: Update to indicate multiple files supported
-
-### Task 3: Update Tool Args Construction
-**File**: `go/internal/cli/commands/chatgpt.go`
-**Change**: Pass `Files` as list to tool args (key change: `"file"` → `"files"` for clarity)
-
-### Task 4: Update Provider Request Struct
-**File**: `go/internal/host/providers/chatgpt.go`
-**Change**: `File string` → `Files []string`
-
-### Task 5: Update Provider Parsing
-**File**: `go/internal/host/providers/chatgpt.go`
-**Change**: Use `toStringArray` to handle both legacy single-string and new list format
-
-### Task 6: Update Provider Upload Call
-**File**: `go/internal/cli/commands/chatgpt.go`
-**Change**: Remove `splitFileList` call (no longer needed — list is already split)
-
-### Task 7: Update Provider uploadFiles Signature
-**File**: `go/internal/host/providers/chatgpt.go`
-**Change**: `uploadFiles(ctx context.Context, rawFiles string)` → `uploadFiles(ctx context.Context, files []string)`  
-Remove internal `splitFileList` call, pass slice directly
-
-### Task 8: Update Tests
-**Files**: `go/internal/host/providers/chatgpt_test.go`
-**Changes**: Update test fixtures to use `Files []string` instead of `File string`
-
-### Task 9: Verify Backward Compatibility
-**Check**: Does `--file a.txt,b.txt` still work? (Yes, `toStringArray` handles comma-separated string)
-**Check**: Does `--file a.txt --file b.txt` work? (Yes, new syntax)
-**Check**: Does single `--file a.txt` work? (Yes, Glazed coerces string to []string)
-
-## Implementation Notes
-
-### Glazed StringList Behavior
-Glazed's `TypeStringList` accepts:
-- Repeated flags: `--file a.txt --file b.txt` → `[]string{"a.txt", "b.txt"}`
-- Single flag: `--file a.txt` → Glazed coerces to `[]string{"a.txt"}`
-
-This means backward compatibility is maintained for existing single-file usage.
-
-### toStringArray already handles everything we need
-```go
-// From toolmap.go — already in the codebase
-func toStringArray(v any) []string {
-    switch raw := v.(type) {
-    case nil:       return nil
-    case string:    // ← handles legacy comma-separated
-        if raw == "" { return nil }
-        return strings.Split(raw, ",")
-    case []string:  // ← handles new list format
-        return raw
-    case []any:    // ← handles []any from JSON
-        // ...
+// Extracts file list from tool args with backward compat for legacy "file" key
+func fileListFromArgs(args map[string]any) []string {
+    if v, ok := args["files"]; ok && v != nil {
+        return toStringArray(v)  // New format: list of strings
     }
+    if v, ok := args["file"]; ok && v != nil {
+        return toStringArray(v)  // Legacy format: comma-separated string
+    }
+    return nil
 }
 ```
 
-We can reuse this function in the provider.
+**parseChatGPTRequest**:
+```go
+// Before
+File: strings.TrimSpace(asString(args["file"])),
 
-## Files to Modify
+// After
+Files: fileListFromArgs(args),
+```
 
-1. `go/internal/cli/commands/chatgpt.go` — Tasks 1-3, 6
-2. `go/internal/host/providers/chatgpt.go` — Tasks 4-5, 7
-3. `go/internal/host/providers/chatgpt_test.go` — Task 8
-4. `ttmp/2026/04/14/SURF-20260414-R7--chatgpt-file-stringlist/design-doc/01-implementation-guide.md` — This file
+**uploadFiles signature**:
+```go
+// Before
+func (b *chatGPTBridge) uploadFiles(ctx context.Context, rawFiles string) error {
+    files := splitFileList(rawFiles)
+    ...
+
+// After
+func (b *chatGPTBridge) uploadFiles(ctx context.Context, files []string) error {
+    if len(files) == 0 {
+        return fmt.Errorf("No files to upload")
+    }
+    ...
+```
+
+**runChatGPTQuery call site**:
+```go
+// Before
+if req.File != "" {
+    if err := bridge.uploadFiles(ctx, req.File); err != nil {
+
+// After
+if len(req.Files) > 0 {
+    if err := bridge.uploadFiles(ctx, req.Files); err != nil {
+```
+
+### Tests: `go/internal/host/providers/chatgpt_test.go`
+
+**New test** (`TestHandleChatGPTToolWithMultipleFiles`):
+```go
+_, err := HandleChatGPTTool(context.Background(), caller, map[string]any{
+    "query": "review these files",
+    "files": []string{"/tmp/a.txt", "/tmp/b.txt", "/tmp/c.md"},
+}, nil, nil)
+if len(uploadedFiles) != 3 { ... }
+```
+
+**Existing test** (`TestHandleChatGPTToolWithFileUpload`) — unchanged, still passes:
+```go
+// Uses legacy "file" key — backward compat works
+HandleChatGPTTool(context.Background(), caller, map[string]any{
+    "query": "review this file",
+    "file":  "/tmp/demo.txt",  // legacy string key
+}, nil, nil)
+```
+
+## Backward Compatibility
+
+| Format | Example | Status |
+|--------|---------|--------|
+| Single `--file` | `--file a.txt` | ✅ Glazed coerces to `[]string{"a.txt"}` |
+| Multiple `--file` | `--file a.txt --file b.txt` | ✅ New syntax |
+| Comma-separated | `--file a.txt,b.txt` | ✅ Provider's `toStringArray` splits by comma |
+| Legacy `"file"` key | `{"file": "/tmp/demo.txt"}` | ✅ Provider checks both keys |
+
+## Why Duplicate toStringArray?
+
+`router/toolmap.go` has a `toStringArray` function, but it's private (lowercase). Options:
+1. Export it to a shared package — more refactoring
+2. Duplicate it locally — simpler, isolated change
+
+Chose option 2. The function is small and well-understood.
+
+## Tasks Completed
+
+- [x] Task 1: Update CLI Settings Struct (`File string` → `Files []string`)
+- [x] Task 2: Update Flag Definition (`TypeString` → `TypeStringList`)
+- [x] Task 3: Update Tool Args Construction
+- [x] Task 4: Update Provider Request Struct
+- [x] Task 5: Update Provider Parsing with backward compat
+- [x] Task 6: Update Provider Upload Call
+- [x] Task 7: Update Provider `uploadFiles` signature
+- [x] Task 8: Update Tests (legacy + new multi-file)
+- [x] Task 9: Verify backward compatibility
+- [x] Verify help text
+
+## Commits
+
+- `8487a00` feat(surf chatgpt): change --file flag to stringlist for multi-file upload
+- `f6e7c1c` docs(ttmp): add SURF-20260414-R7 ticket and implementation guide
