@@ -30,7 +30,7 @@ type ChatGPTRequest struct {
 	Model      string
 	ListModels bool
 	WithPage   bool
-	File       string
+	Files      []string
 	Timeout    time.Duration
 	TabID      *int64
 }
@@ -69,7 +69,7 @@ func parseChatGPTRequest(rawArgs map[string]any, tabID *int64) (ChatGPTRequest, 
 		Model:      strings.TrimSpace(asString(args["model"])),
 		ListModels: listModels,
 		WithPage:   asBool(args["with-page"]) || asBool(args["withPage"]),
-		File:       strings.TrimSpace(asString(args["file"])),
+		Files:      fileListFromArgs(args),
 		Timeout:    timeout,
 		TabID:      tabID,
 	}, nil
@@ -179,8 +179,8 @@ func runChatGPTQuery(ctx context.Context, caller NativeCaller, req ChatGPTReques
 		}
 	}
 
-	if req.File != "" {
-		if err := bridge.uploadFiles(ctx, req.File); err != nil {
+	if len(req.Files) > 0 {
+		if err := bridge.uploadFiles(ctx, req.Files); err != nil {
 			return nil, err
 		}
 	}
@@ -813,6 +813,54 @@ func (b *chatGPTBridge) waitForFileInputSelector(ctx context.Context, timeout ti
 	return "", fmt.Errorf("ChatGPT file input not found")
 }
 
+// toStringArray converts a value to a []string.
+// Handles nil, string (comma-separated), []string, and []any.
+func toStringArray(v any) []string {
+	switch raw := v.(type) {
+	case nil:
+		return nil
+	case string:
+		if raw == "" {
+			return nil
+		}
+		return strings.Split(raw, ",")
+	case []string:
+		return raw
+	case []any:
+		out := make([]string, 0, len(raw))
+		seen := map[string]struct{}{}
+		for _, item := range raw {
+			if s, ok := item.(string); ok && s != "" {
+				if _, exists := seen[s]; !exists {
+					seen[s] = struct{}{}
+					out = append(out, s)
+				}
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// fileListFromArgs extracts file paths from tool args.
+// Supports the new "files" key (string list) and falls back to the legacy
+// "file" key (comma-separated string) for backward compatibility.
+func fileListFromArgs(args map[string]any) []string {
+	if args == nil {
+		return nil
+	}
+	// New format: "files" key with []string value
+	if v, ok := args["files"]; ok && v != nil {
+		return toStringArray(v)
+	}
+	// Legacy format: "file" key with comma-separated string value
+	if v, ok := args["file"]; ok && v != nil {
+		return toStringArray(v)
+	}
+	return nil
+}
+
 func splitFileList(raw string) []string {
 	parts := strings.Split(raw, ",")
 	files := make([]string, 0, len(parts))
@@ -825,10 +873,9 @@ func splitFileList(raw string) []string {
 	return files
 }
 
-func (b *chatGPTBridge) uploadFiles(ctx context.Context, rawFiles string) error {
-	files := splitFileList(rawFiles)
+func (b *chatGPTBridge) uploadFiles(ctx context.Context, files []string) error {
 	if len(files) == 0 {
-		return fmt.Errorf("Invalid file path")
+		return fmt.Errorf("No files to upload")
 	}
 	selector, err := b.waitForFileInputSelector(ctx, 12*time.Second)
 	if err != nil {

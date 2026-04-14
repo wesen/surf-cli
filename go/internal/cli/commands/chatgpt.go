@@ -24,7 +24,7 @@ type ChatGPTCommand struct {
 type ChatGPTSettings struct {
 	Query       string `glazed:"query"`
 	Model       string `glazed:"model"`
-	File        string `glazed:"file"`
+	Files       []string `glazed:"file"`
 	WithPage    bool   `glazed:"with-page"`
 	ListModels  bool   `glazed:"list-models"`
 	TimeoutSec  int    `glazed:"timeout"`
@@ -53,7 +53,7 @@ func NewChatGPTCommand() (*ChatGPTCommand, error) {
 		cmds.WithLong("Uses the Go native host ChatGPT provider through the local surf socket. Requires an active ChatGPT browser login."),
 		cmds.WithFlags(
 			fields.New("model", fields.TypeString, fields.WithHelp("ChatGPT model to select")),
-			fields.New("file", fields.TypeString, fields.WithHelp("File to attach before sending the prompt")),
+			fields.New("file", fields.TypeStringList, fields.WithHelp("File(s) to attach before sending the prompt. Specify multiple files with repeated --file flags (e.g., --file a.txt --file b.txt). Backward compatible with single file paths.")),
 			fields.New("with-page", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Include current page content in the prompt")),
 			fields.New("list-models", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("List available ChatGPT models without sending a prompt")),
 			fields.New("timeout", fields.TypeInteger, fields.WithDefault(2700), fields.WithHelp("Request timeout in seconds")),
@@ -92,8 +92,8 @@ func (c *ChatGPTCommand) RunIntoGlazeProcessor(
 	if s.Model != "" {
 		toolArgs["model"] = s.Model
 	}
-	if s.File != "" {
-		toolArgs["file"] = s.File
+	if len(s.Files) > 0 {
+		toolArgs["files"] = s.Files
 	}
 	if s.WithPage {
 		toolArgs["with-page"] = true

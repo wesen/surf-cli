@@ -256,6 +256,73 @@ func TestHandleChatGPTToolWithFileUpload(t *testing.T) {
 	}
 }
 
+func TestHandleChatGPTToolWithMultipleFiles(t *testing.T) {
+	var uploadedFiles []string
+
+	caller := &fakeNativeCaller{handler: func(msg map[string]any) (map[string]any, error) {
+		switch msg["type"] {
+		case "GET_CHATGPT_COOKIES":
+			return map[string]any{"cookies": []any{map[string]any{"name": "__Secure-next-auth.session-token", "value": "abc"}}}, nil
+		case "CHATGPT_NEW_TAB":
+			return map[string]any{"tabId": int64(42)}, nil
+		case "CHATGPT_CLOSE_TAB":
+			return map[string]any{"success": true}, nil
+		case "UPLOAD_FILE":
+			switch files := msg["files"].(type) {
+			case []string:
+				uploadedFiles = append([]string{}, files...)
+			case []any:
+				for _, f := range files {
+					uploadedFiles = append(uploadedFiles, asString(f))
+				}
+			}
+			return map[string]any{"success": true}, nil
+		case "CHATGPT_CDP_COMMAND":
+			return map[string]any{"ok": true}, nil
+		case "CHATGPT_EVALUATE":
+			expr := asString(msg["expression"])
+			switch {
+			case strings.Contains(expr, "document.readyState"):
+				return map[string]any{"result": map[string]any{"value": "complete"}}, nil
+			case strings.Contains(expr, "document.title.toLowerCase"):
+				return map[string]any{"result": map[string]any{"value": "chatgpt"}}, nil
+			case strings.Contains(expr, "challenge-platform"):
+				return map[string]any{"result": map[string]any{"value": false}}, nil
+			case strings.Contains(expr, "backend-api/me"):
+				return map[string]any{"result": map[string]any{"value": map[string]any{"status": float64(200), "hasLoginCta": false}}}, nil
+			case strings.Contains(expr, "!node.hasAttribute('disabled')"):
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			case strings.Contains(expr, "data-surf-file-input-id"):
+				return map[string]any{"result": map[string]any{"value": `[data-surf-file-input-id="surf-upload-1"]`}}, nil
+			case strings.Contains(expr, "text.trim().length > 0"):
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			case strings.Contains(expr, "return 'clicked'"):
+				return map[string]any{"result": map[string]any{"value": "clicked"}}, nil
+			case strings.Contains(expr, "extractBestAssistantFromTurn"):
+				return map[string]any{"result": map[string]any{"value": map[string]any{"text": "ok", "stopVisible": false, "finished": true}}}, nil
+			default:
+				return map[string]any{"result": map[string]any{"value": true}}, nil
+			}
+		default:
+			return map[string]any{"ok": true}, nil
+		}
+	}}
+
+	_, err := HandleChatGPTTool(context.Background(), caller, map[string]any{
+		"query": "review these files",
+		"files": []string{"/tmp/a.txt", "/tmp/b.txt", "/tmp/c.md"},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(uploadedFiles) != 3 {
+		t.Fatalf("expected 3 files, got: %#v", uploadedFiles)
+	}
+	if uploadedFiles[0] != "/tmp/a.txt" || uploadedFiles[1] != "/tmp/b.txt" || uploadedFiles[2] != "/tmp/c.md" {
+		t.Fatalf("unexpected file list: %#v", uploadedFiles)
+	}
+}
+
 func TestHandleChatGPTToolListModels(t *testing.T) {
 	caller := &fakeNativeCaller{handler: func(msg map[string]any) (map[string]any, error) {
 		switch msg["type"] {
