@@ -193,6 +193,69 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	cobraAnnasArchive.AddCommand(cobraAnnasArchiveDownload)
 	rootCmd.AddCommand(cobraAnnasArchive)
 
+	// 1lib.sk (libgen) commands
+	libgenCmd, err := commands.NewLibgenCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgen, err := buildGlazedCommand(libgenCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// libgen search
+	libgenSearchCmd, err := commands.NewLibgenSearchCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgenSearch, err := buildDualModeCommand(libgenSearchCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// libgen download
+	libgenDownloadCmd, err := commands.NewLibgenDownloadCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgenDownload, err := buildDualModeCommand(libgenDownloadCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// libgen suggestions
+	libgenSuggestionsCmd, err := commands.NewLibgenSuggestionsCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgenSuggestions, err := buildDualModeCommand(libgenSuggestionsCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// libgen collections
+	libgenCollectionsCmd, err := commands.NewLibgenCollectionsCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgenCollections, err := buildDualModeCommand(libgenCollectionsCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// libgen collection (books in collection)
+	libgenCollectionCmd, err := commands.NewLibgenCollectionCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraLibgenCollection, err := buildDualModeCommand(libgenCollectionCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	cobraLibgen.AddCommand(cobraLibgenSearch, cobraLibgenDownload, cobraLibgenSuggestions, cobraLibgenCollections, cobraLibgenCollection)
+	rootCmd.AddCommand(cobraLibgen)
+
 	if err := addPageAndInputCommands(rootCmd); err != nil {
 		return nil, err
 	}
