@@ -83,41 +83,78 @@ if (heading) result.book.title = heading.textContent.trim();
 var authorLink = document.querySelector('a[href*="/author/"]');
 if (authorLink) result.book.author = authorLink.textContent.trim();
 
-// Find "You may be interested in" section
-var sections = document.querySelectorAll('h2');
-sections.forEach(function(section) {
-  var text = section.textContent.trim();
-  if (text.includes('interested') || text.includes('recommend')) {
-    var container = section.closest('div');
-    if (container) {
-      var links = container.querySelectorAll('a[href*="/book/"]');
-      links.forEach(function(link) {
-        var href = link.getAttribute('href');
-        var idMatch = href.match(/\/book\/([^\/]+)/);
-        var id = idMatch ? idMatch[1] : '';
-        
-        // Get title from the element
-        var titleEl = link.querySelector('span') || link;
-        var title = titleEl.textContent.trim();
-        
-        // Get author from nearby element
-        var parent = link.closest('div') || link.parentElement;
-        var author = '';
-        var authorLink = parent ? parent.querySelector('a[href*="/author/"]') : null;
-        if (authorLink) author = authorLink.textContent.trim();
-        
-        if (title && !title.includes('Downloaded') && id) {
-          result.suggestions.push({
-            title: title,
-            author: author,
-            url: 'https://1lib.sk' + href,
-            id: id
-          });
-        }
+// Look for z-book custom elements (used by 1lib.sk for books)
+var bookElements = document.querySelectorAll('z-book');
+bookElements.forEach(function(el) {
+  var href = el.getAttribute('href');
+  var idMatch = href ? href.match(/\/book\/([^\/]+)/) : null;
+  var id = idMatch ? idMatch[1] : '';
+  var title = el.getAttribute('title') || '';
+  var author = el.getAttribute('author') || '';
+  
+  if (id && title) {
+    var exists = result.suggestions.some(function(s) { return s.id === id; });
+    if (!exists) {
+      result.suggestions.push({
+        title: title,
+        author: author,
+        url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
+        id: id
       });
     }
   }
 });
+
+// Look for z-cover custom elements with book links
+var coverElements = document.querySelectorAll('z-cover');
+coverElements.forEach(function(el) {
+  var link = el.closest('a[href*="/book/"]');
+  if (!link) {
+    link = el.querySelector('a');
+  }
+  if (link) {
+    var href = link.getAttribute('href');
+    var idMatch = href ? href.match(/\/book\/([^\/]+)/) : null;
+    var id = idMatch ? idMatch[1] : '';
+    var title = el.getAttribute('title') || '';
+    var author = el.getAttribute('author') || '';
+    
+    if (id && title) {
+      var exists = result.suggestions.some(function(s) { return s.id === id; });
+      if (!exists) {
+        result.suggestions.push({
+          title: title,
+          author: author,
+          url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
+          id: id
+        });
+      }
+    }
+  }
+});
+
+// Also look for standard book links in related sections
+if (result.suggestions.length === 0) {
+  var allBookLinks = document.querySelectorAll('a[href*="/book/"]');
+  allBookLinks.forEach(function(link) {
+    var href = link.getAttribute('href');
+    var idMatch = href.match(/\/book\/([^\/]+)/);
+    var id = idMatch ? idMatch[1] : '';
+    var title = link.textContent.trim();
+    
+    if (id && title && !title.includes('Login') && !title.includes('Sign')) {
+      var exists = result.suggestions.some(function(s) { return s.id === id; });
+      if (!exists) {
+        result.suggestions.push({
+          title: title,
+          author: '',
+          url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
+          id: id
+        });
+      }
+    }
+  });
+}
 
 return result;
 `

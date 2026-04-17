@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -83,53 +84,57 @@ if (heading) result.book.title = heading.textContent.trim();
 var authorLink = document.querySelector('a[href*="/author/"]');
 if (authorLink) result.book.author = authorLink.textContent.trim();
 
-// Find "Related Booklists" section
-var sections = document.querySelectorAll('h2');
-sections.forEach(function(section) {
-  var text = section.textContent.trim();
-  if (text.includes('Related') || text.includes('Booklists') || text.includes('Collections')) {
-    var container = section.closest('div');
-    if (container) {
-      var listItems = container.querySelectorAll('li');
-      listItems.forEach(function(item) {
-        var link = item.querySelector('a[href*="/booklist/"]');
-        if (link) {
-          var href = link.getAttribute('href');
-          var idMatch = href.match(/\/booklist\/([^\/]+)/);
-          var id = idMatch ? idMatch[1] : '';
-          var title = link.textContent.trim();
-          var countMatch = title.match(/\+\s*(\d+)\s*Books?/);
-          var count = countMatch ? countMatch[1] : '';
-          
-          result.collections.push({
-            title: title.replace(/\s*\+\s*\d+\s*Books?/, '').trim(),
-            url: 'https://1lib.sk' + href,
-            id: id,
-            bookCount: count
-          });
-        }
-      });
-      
-      // Alternative: look for booklist links
-      if (result.collections.length === 0) {
-        var links = container.querySelectorAll('a[href*="/booklist/"]');
-        links.forEach(function(link) {
-          var href = link.getAttribute('href');
-          var idMatch = href.match(/\/booklist\/([^\/]+)/);
-          var id = idMatch ? idMatch[1] : '';
-          var title = link.textContent.trim();
-          
-          result.collections.push({
-            title: title,
-            url: 'https://1lib.sk' + href,
-            id: id,
-            bookCount: ''
-          });
+// Look for z-booklist custom elements (used by 1lib.sk for booklists)
+var booklistElements = document.querySelectorAll('z-booklist');
+booklistElements.forEach(function(el) {
+  var href = el.getAttribute('href');
+  var id = el.getAttribute('id') || '';
+  var topic = el.getAttribute('topic') || el.getAttribute('name') || '';
+  var quantity = el.getAttribute('quantity') || '';
+  
+  // Get title from nested z-cover or img
+  var cover = el.querySelector('z-cover');
+  var title = '';
+  if (cover) {
+    title = cover.getAttribute('title') || '';
+    if (!title) {
+      var img = cover.querySelector('img');
+      if (img) title = img.getAttribute('alt') || '';
+    }
+  }
+  
+  if (href && href.includes('/booklist/')) {
+    result.collections.push({
+      title: topic || title || 'Untitled',
+      url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
+      id: id,
+      bookCount: quantity
+    });
+  }
+});
+
+// Also look for standard booklist links
+if (result.collections.length === 0) {
+  var allBooklistLinks = document.querySelectorAll('a[href*="/booklist/"]');
+  allBooklistLinks.forEach(function(link) {
+    var href = link.getAttribute('href');
+    var idMatch = href.match(/\/booklist\/([^\/]+)/);
+    var id = idMatch ? idMatch[1] : '';
+    var title = link.textContent.trim();
+    
+    if (title && id && !title.includes('Login') && !title.includes('Sign')) {
+      var exists = result.collections.some(function(c) { return c.id === id; });
+      if (!exists) {
+        result.collections.push({
+          title: title,
+          url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
+          id: id,
+          bookCount: ''
         });
       }
     }
-  }
-});
+  });
+}
 
 return result;
 `
@@ -224,7 +229,49 @@ func fetchLibgenCollections(ctx context.Context, s *LibgenCollectionsSettings) (
 		closeOwnedTab(ctx, client, ownedTabID)
 	}()
 
+	// Wait for page to load and scroll to trigger lazy loading
+	time.Sleep(5 * time.Second)
+
+	// Scroll to trigger lazy loading for collections
+	for i := 0; i < 8; i++ {
+		_, _ = ExecuteTool(ctx, client, "js", map[string]any{"code": `window.scrollTo(0, document.body.scrollHeight); return document.body.scrollHeight;`}, tabID, windowID)
+		time.Sleep(2 * time.Second)
+		// Try to click "Load more" buttons
+		_, _ = ExecuteTool(ctx, client, "js", map[string]any{"code": `
+			var buttons = document.querySelectorAll('button');
+			buttons.forEach(function(btn) {
+				if (btn.textContent.includes('Load more') || btn.textContent.includes('Show more')) {
+					btn.click();
+				}
+			});
+			return 'clicked';
+		`}, tabID, windowID)
+	}
+	_, _ = ExecuteTool(ctx, client, "js", map[string]any{"code": `window.scrollTo(0, 0);`}, tabID, windowID)
 	time.Sleep(2 * time.Second)
+
+	// Debug: probe the page after clicking
+	probeResp, _ := ExecuteTool(ctx, client, "js", map[string]any{"code": `
+		var booklistLinks = document.querySelectorAll('a[href*="/booklist/"]').length;
+		// Check for any element containing "Related Booklists"
+		var relatedSection = null;
+		var allElements = document.querySelectorAll('*');
+		allElements.forEach(function(el) {
+			if (el.textContent === 'Related Booklists') {
+				relatedSection = el;
+			}
+		});
+		var relatedHTML = relatedSection ? relatedSection.outerHTML.substring(0, 1000) : 'NOT FOUND';
+		var relatedParent = relatedSection ? relatedSection.parentElement.outerHTML.substring(0, 2000) : 'NOT FOUND';
+		return { booklistLinks: booklistLinks, relatedHTML: relatedHTML, relatedParent: relatedParent };
+	`}, tabID, windowID)
+	if probeResp != nil {
+		parsed := parseResult(probeResp)
+		if data, ok := parsed.Data.(map[string]any); ok {
+			fmt.Fprintf(os.Stderr, "DEBUG: hasBooklist=%v booklistLinks=%v allLinks=%v\n", data["hasBooklist"], data["booklistLinks"], data["allLinks"])
+		}
+	}
+	time.Sleep(1 * time.Second)
 
 	resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": buildLibgenCollectionsCode()}, tabID, windowID)
 	if err != nil {
