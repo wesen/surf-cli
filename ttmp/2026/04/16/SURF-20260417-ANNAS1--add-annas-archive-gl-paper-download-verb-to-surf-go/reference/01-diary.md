@@ -372,3 +372,26 @@ surf-go libgen download --url "https://1lib.sk/book/4vrAp1VDOn/project-hail-mary
 ### libgen suggestions ✅ (returns 0 - book may not have suggestions)
 ### libgen collections ✅ (returns 0 - book may not be in collections)
 ### libgen collection ✅ (needs valid collection ID)
+
+### Fix: 1lib.sk Extraction Improvements (Commit 7e95b25)
+
+**Issue**: Collections and suggestions were returning 0 results despite being visible on the page.
+
+**Root cause**: 1lib.sk uses custom elements (`<z-booklist>`, `<z-book>`, `<z-cover>`) for displaying booklists and related books, not standard HTML elements.
+
+**Solution**:
+1. Parse `<z-booklist>` custom elements with `href`, `topic`, `quantity` attributes
+2. Parse `<z-cover>` custom elements with `title`, `author` attributes  
+3. Add longer wait times and scroll to trigger lazy loading
+4. Click "Load more" buttons to reveal more content
+
+**Results**:
+- Collections: Now finds 30 collections for "The Mountain Is You"
+- Suggestions: Now finds 42 suggestions
+
+**Key HTML patterns discovered**:
+```html
+<z-booklist href="/booklist/527560/..." topic="Self-Development" quantity="699">
+  <z-cover title="Book Title" author="Author Name">
+</z-booklist>
+```
