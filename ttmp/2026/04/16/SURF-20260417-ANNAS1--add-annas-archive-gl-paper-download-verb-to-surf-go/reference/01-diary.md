@@ -326,3 +326,27 @@ Added commands for 1lib.sk (Z-Library mirror):
 ```
 feat: add 1lib.sk (libgen) commands
 ```
+
+### 1lib.sk Search Fix (Commit 8fdeb4d)
+
+The key issue was that 1lib.sk loads search results dynamically via JavaScript but the book links aren't immediately available in the DOM. The solution was to parse the numbered titles directly from the body text using a regex pattern.
+
+Working search extraction:
+- Parse `/\d+\s*\n([^\n]{5,300})/g` from `document.body.innerText`
+- Skip headers, footers, and navigation items
+- Extract metadata (author, year, size, format) from surrounding text
+- Generate search URLs as fallback when no book IDs are available
+
+Example results:
+```
+# 1lib.sk Search Results
+
+- **Results:** 8 found
+
+## 1. Project Hail Mary
+## 2. 極限返航 = Project Hail Mary
+## 3. Proyecto Hail Mary / Project Hail Mary
+## 4. Project Hail Mary: A Novel
+## 5. 挽救计划 原名: Project Hail Mary
+## 6. Weir, Andy - Project Hail Mary: A Novel
+```
