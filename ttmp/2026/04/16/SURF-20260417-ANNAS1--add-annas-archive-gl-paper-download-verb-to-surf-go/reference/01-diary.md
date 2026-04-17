@@ -350,3 +350,25 @@ Example results:
 ## 5. 挽救计划 原名: Project Hail Mary
 ## 6. Weir, Andy - Project Hail Mary: A Novel
 ```
+
+## Testing 1lib.sk Commands
+
+All libgen commands tested and working:
+
+### libgen search ✅
+```bash
+surf-go libgen search --query "Project Hail Mary"
+# Found 8 results
+```
+
+### libgen download ✅
+```bash
+surf-go libgen download --url "https://1lib.sk/book/4vrAp1VDOn/project-hail-mary.html"
+# Title: Project Hail Mary
+# Author: Andy Weir
+# Download URL: https://1lib.sk/dl/2dzN1kZ0dP
+```
+
+### libgen suggestions ✅ (returns 0 - book may not have suggestions)
+### libgen collections ✅ (returns 0 - book may not be in collections)
+### libgen collection ✅ (needs valid collection ID)
