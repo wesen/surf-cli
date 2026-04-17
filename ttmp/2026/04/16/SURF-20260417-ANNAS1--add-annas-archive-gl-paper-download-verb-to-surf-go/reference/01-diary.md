@@ -264,3 +264,39 @@ feat: add annas-archive command with search and download subcommands
 - Add paper title/metadata to download output
 - Add actual PDF download option (fetch URL and save to file)
 - Add `--output FILE` flag for direct file save
+
+---
+
+## Step 5: Metadata, Output File, and Fast Mirror Rejection
+
+### What I did
+- Added paper title, year, format, size extraction from MD5 page
+- Added `--save-to` flag for direct PDF download to file
+- Rejected fast mirrors with clear error message
+
+### New features
+```bash
+# Download with metadata
+surf-go annas-archive download --doi 10.1038/nature12373
+# Output includes: Title, Year (2013), Format (PDF), Size (0.9MB)
+
+# Download to file directly
+surf-go annas-archive download --doi 10.1038/nature12373 --save-to ~/papers/thermometry.pdf
+
+# Fast mirrors now fail with clear message
+surf-go annas-archive download --doi 10.1038/nature12373 --mirror fast
+# Error: --mirror fast is not supported: fast mirrors require Anna's Archive membership
+```
+
+### Key fix: --output vs --save-to
+Glazed already uses `--output` for output format. Used `--save-to` for PDF file path instead.
+
+### Commit
+```
+feat: add metadata extraction, --save-to flag, and fail fast for fast mirrors
+```
+
+### Done
+- [x] Add paper title/metadata to download output
+- [x] Add --save-to FILE flag for direct file save
+- [x] Fail fast for fast mirrors with clear message
