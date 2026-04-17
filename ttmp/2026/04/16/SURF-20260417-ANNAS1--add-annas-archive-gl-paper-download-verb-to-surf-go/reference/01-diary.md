@@ -300,3 +300,29 @@ feat: add metadata extraction, --save-to flag, and fail fast for fast mirrors
 - [x] Add paper title/metadata to download output
 - [x] Add --save-to FILE flag for direct file save
 - [x] Fail fast for fast mirrors with clear message
+
+---
+
+## Step 6: 1lib.sk (libgen) Commands
+
+### What I did
+Added commands for 1lib.sk (Z-Library mirror):
+- `libgen search --query` - Search for books
+- `libgen download --id/--url` - Get download link or download file
+- `libgen suggestions --id/--url` - Get suggested books based on a book
+- `libgen collections --id/--url` - Get collections/booklists a book appears in
+- `libgen collection --id/--url` - Get all books in a collection
+
+### Site structure
+- Search URL: `https://1lib.sk/s/{query}`
+- Book detail: `/book/{id}/{slug}.html`
+- Download link: `/dl/{hash}`
+- Collections: `/booklist/{id}`
+
+### Issue
+1lib.sk uses dynamic content loading - book results aren't immediately available in the DOM when we query. The search extraction returns 0 results despite the page having results loaded.
+
+### Commit
+```
+feat: add 1lib.sk (libgen) commands
+```
