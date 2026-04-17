@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,9 +36,10 @@ var _ cmds.WriterCommand = (*AnnasArchiveDownloadCommand)(nil)
 
 type AnnasArchiveDownloadSettings struct {
 	DOI         string `glazed:"doi"`
-	MirrorType  string `glazed:"mirror"`        // "fast", "slow", or specific server ID
-	MirrorIndex int    `glazed:"mirror-index"` // specific server index (0-11 for fast, 0-7 for slow)
+	MirrorType  string `glazed:"mirror"`        // "slow" only (fast mirrors require membership)
+	MirrorIndex int    `glazed:"mirror-index"` // specific server index (0-7 for slow)
 	ListMirrors bool   `glazed:"list-mirrors"`
+Output      string `glazed:"save-to"`      // output file path for PDF download
 	KeepTabOpen bool   `glazed:"keep-tab-open"`
 	Socket      string `glazed:"socket-path"`
 	TimeoutMS   int    `glazed:"timeout-ms"`
@@ -55,6 +58,7 @@ type MirrorInfo struct {
 type annasArchiveDownloadData struct {
 	Raw         map[string]any
 	MD5         string
+	Title       string
 	Metadata    map[string]any
 	Mirrors     []MirrorInfo
 	DownloadURL string `json:"download_url"`
@@ -73,12 +77,13 @@ func NewAnnasArchiveDownloadCommand() (*AnnasArchiveDownloadCommand, error) {
 	desc := cmds.NewCommandDescription(
 		"download",
 		cmds.WithShort("Download a paper from Anna's Archive by DOI"),
-		cmds.WithLong("Downloads a paper from Anna's Archive by DOI. Use --list-mirrors to see available mirrors and --mirror to select fast/slow/specific mirror. By default selects a random slow mirror."),
+		cmds.WithLong("Downloads a paper from Anna's Archive by DOI. Use --list-mirrors to see available mirrors and --mirror to select slow mirror. By default selects a random slow mirror."),
 		cmds.WithFlags(
 			fields.New("doi", fields.TypeString, fields.WithRequired(true), fields.WithHelp("Paper DOI (e.g., 10.1038/nature12373)")),
-			fields.New("mirror", fields.TypeString, fields.WithDefault("slow"), fields.WithHelp("Mirror type: 'fast', 'slow', or 'list' to show available mirrors")),
-			fields.New("mirror-index", fields.TypeInteger, fields.WithDefault(-1), fields.WithHelp("Specific mirror index (-1 = random). Fast: 0-11, Slow: 0-7")),
+			fields.New("mirror", fields.TypeString, fields.WithDefault("slow"), fields.WithHelp("Mirror type: 'slow' only (fast mirrors require membership)")),
+			fields.New("mirror-index", fields.TypeInteger, fields.WithDefault(-1), fields.WithHelp("Specific mirror index (-1 = random). Slow: 0-7")),
 			fields.New("list-mirrors", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("List available mirrors for this paper")),
+				fields.New("save-to", fields.TypeString, fields.WithDefault(""), fields.WithHelp("Save downloaded PDF to this file path")),
 			fields.New("keep-tab-open", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Keep the tab open when finished")),
 			fields.New("socket-path", fields.TypeString, fields.WithDefault(config.CurrentSocketPath()), fields.WithHelp("Host socket path")),
 			fields.New("timeout-ms", fields.TypeInteger, fields.WithDefault(120000), fields.WithHelp("Socket request timeout in milliseconds")),
@@ -119,6 +124,52 @@ func getMirrorURL(md5, mirrorType string, mirrorIndex int) string {
 	}
 
 	return fmt.Sprintf("https://annas-archive.gl/%s_download/%s/0/%d", downloadType, md5, serverIndex)
+}
+
+// buildMetadataCode returns JS to extract paper metadata from MD5 page
+func buildMetadataCode() string {
+	return `
+var result = {
+  title: '',
+  authors: '',
+  doi: '',
+  year: '',
+  publisher: '',
+  format: '',
+  size: ''
+};
+
+// Get title from h1 or h2
+var heading = document.querySelector('h1') || document.querySelector('h2');
+if (heading) {
+  result.title = heading.textContent.trim();
+}
+
+// Get DOI
+var bodyText = document.body.innerText;
+var doiMatch = bodyText.match(/(?:doi[:\s]*|https:\/\/doi\.org\/)([\d.]+\/[\w./%-]+)/i);
+if (doiMatch) {
+  result.doi = doiMatch[1];
+}
+
+// Get year
+var yearMatch = bodyText.match(/\b(19|20)\d{2}\b/);
+if (yearMatch) {
+  result.year = yearMatch[0];
+}
+
+// Get format and size
+var formatMatch = bodyText.match(/\b(PDF|EPUB|CBZ)\b/);
+if (formatMatch) {
+  result.format = formatMatch[0];
+}
+var sizeMatch = bodyText.match(/(\d+\.?\d*)\s*(MB|GB|KB)/i);
+if (sizeMatch) {
+  result.size = sizeMatch[0];
+}
+
+return result;
+`
 }
 
 // buildMirrorListCode returns JS to extract all available mirrors
@@ -296,7 +347,7 @@ func fetchAnnasArchiveDownload(ctx context.Context, s *AnnasArchiveDownloadSetti
 
 	time.Sleep(2 * time.Second)
 
-	// Get mirrors
+	// Get mirrors from SciDB page first
 	mirrorResp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": buildMirrorListCode()}, tabID, windowID)
 	if err != nil {
 		return nil, err
@@ -304,31 +355,47 @@ func fetchAnnasArchiveDownload(ctx context.Context, s *AnnasArchiveDownloadSetti
 
 	mirrorData := parseMirrorResponse(mirrorResp)
 
-	// If on SciDB page, navigate to MD5 page
-	if mirrorData.RecordURL != "" && len(mirrorData.Fast) == 0 && len(mirrorData.Slow) == 0 {
-		md5PageURL := "https://annas-archive.gl" + mirrorData.RecordURL
-		if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": md5PageURL}, tabID, windowID); err != nil {
+	// Navigate to MD5 page for metadata and mirrors
+	md5PageURL := "https://annas-archive.gl/md5/" + mirrorData.MD5
+	if _, err := ExecuteTool(ctx, client, "navigate", map[string]any{"url": md5PageURL}, tabID, windowID); err != nil {
+		return nil, err
+	}
+	if tabID != nil {
+		if err := waitForTabReady(ctx, client, *tabID, tabReadyOptions{URLPrefix: md5PageURL}); err != nil {
 			return nil, err
 		}
-		if tabID != nil {
-			if err := waitForTabReady(ctx, client, *tabID, tabReadyOptions{URLPrefix: md5PageURL}); err != nil {
-				return nil, err
-			}
-		}
-		time.Sleep(2 * time.Second)
+	}
+	time.Sleep(2 * time.Second)
 
-		mirrorResp, err = ExecuteTool(ctx, client, "js", map[string]any{"code": buildMirrorListCode()}, tabID, windowID)
-		if err != nil {
-			return nil, err
-		}
-		mirrorData = parseMirrorResponse(mirrorResp)
+	// Extract metadata from MD5 page
+	metadataResp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": buildMetadataCode()}, tabID, windowID)
+	if err != nil {
+		return nil, err
+	}
+	metadataData := parseMetadataResponse(metadataResp)
+
+	// Re-fetch mirrors from MD5 page (for --list-mirrors)
+	mirrorResp, err = ExecuteTool(ctx, client, "js", map[string]any{"code": buildMirrorListCode()}, tabID, windowID)
+	if err != nil {
+		return nil, err
+	}
+	mirrorData = parseMirrorResponse(mirrorResp)
+
+	// Build metadata map
+	metadata := map[string]any{
+		"doi":     metadataData.DOI,
+		"title":   metadataData.Title,
+		"year":    metadataData.Year,
+		"format":  metadataData.Format,
+		"size":    metadataData.Size,
+		"authors": metadataData.Authors,
 	}
 
 	// List mirrors mode
 	if s.ListMirrors || s.MirrorType == "list" {
 		return &annasArchiveDownloadData{
 			MD5:      mirrorData.MD5,
-			Metadata: mirrorData.Metadata,
+			Metadata: metadata,
 			Mirrors:  mirrorData.AllMirrors(),
 		}, nil
 	}
@@ -337,6 +404,11 @@ func fetchAnnasArchiveDownload(ctx context.Context, s *AnnasArchiveDownloadSetti
 	mirrorType := s.MirrorType
 	if mirrorType == "" || mirrorType == "list" {
 		mirrorType = "slow"
+	}
+
+	// Fail fast for fast mirrors (not supported yet)
+	if mirrorType == "fast" {
+		return nil, fmt.Errorf("--mirror fast is not supported: fast mirrors require Anna's Archive membership. Use --mirror slow (default) or --list-mirrors to see options")
 	}
 
 	mirrorURL := getMirrorURL(mirrorData.MD5, mirrorType, s.MirrorIndex)
@@ -411,7 +483,7 @@ func fetchAnnasArchiveDownload(ctx context.Context, s *AnnasArchiveDownloadSetti
 				downloadURL = url
 				break
 			}
-			
+
 			// Log state for debugging
 			if state, ok := dataMap["pageState"].(string); ok && state == "waiting" {
 				msg := ""
@@ -425,15 +497,27 @@ func fetchAnnasArchiveDownload(ctx context.Context, s *AnnasArchiveDownloadSetti
 		time.Sleep(3 * time.Second)
 	}
 
+if s.Output != "" {
+		if err := downloadFile(ctx, s, downloadURL, metadataData.Title); err != nil {
+			return nil, err
+		}
+	}
+
+	// Ensure output path ends with .pdf
+	if s.Output != "" && !strings.HasSuffix(s.Output, ".pdf") {
+		s.Output = s.Output + ".pdf"
+	}
+
 	return &annasArchiveDownloadData{
 		Raw: map[string]any{
 			"md5":           mirrorData.MD5,
-			"metadata":       mirrorData.Metadata,
-			"download_url":   downloadURL,
+			"metadata":       metadata,
+			"download_url":  downloadURL,
 			"mirror_used":    mirrorURL,
 		},
 		MD5:         mirrorData.MD5,
-		Metadata:    mirrorData.Metadata,
+		Title:       metadataData.Title,
+		Metadata:    metadata,
 		DownloadURL: downloadURL,
 	}, nil
 }
@@ -505,6 +589,39 @@ func parseMirrorResponse(resp map[string]any) *mirrorListData {
 	return result
 }
 
+type metadataResult struct {
+	Title     string
+	Authors   string
+	DOI       string
+	Year      string
+	Publisher string
+	Format    string
+	Size      string
+}
+
+func parseMetadataResponse(resp map[string]any) *metadataResult {
+	if e := extractErrorText(resp); e != "" {
+		return &metadataResult{}
+	}
+
+	parsed := parseResult(resp)
+	dataMap, ok := parsed.Data.(map[string]any)
+	if !ok {
+		return &metadataResult{}
+	}
+
+	result := &metadataResult{}
+	result.Title, _ = dataMap["title"].(string)
+	result.Authors, _ = dataMap["authors"].(string)
+	result.DOI, _ = dataMap["doi"].(string)
+	result.Year, _ = dataMap["year"].(string)
+	result.Publisher, _ = dataMap["publisher"].(string)
+	result.Format, _ = dataMap["format"].(string)
+	result.Size, _ = dataMap["size"].(string)
+
+	return result
+}
+
 func annasArchiveDownloadDataToRows(data *annasArchiveDownloadData) []types.Row {
 	rows := []types.Row{}
 
@@ -561,7 +678,7 @@ func renderAnnasArchiveDownloadMarkdown(data *annasArchiveDownloadData) string {
 			}
 		}
 
-		b.WriteString("\n---\n*Use `--mirror fast --mirror-index N` or `--mirror slow --mirror-index N` to select.*\n")
+		b.WriteString("\n---\n*Use `--mirror slow --mirror-index N` to select.*\n")
 		return b.String()
 	}
 
@@ -582,10 +699,87 @@ func renderAnnasArchiveDownloadMarkdown(data *annasArchiveDownloadData) string {
 	b.WriteString("\n## Download\n\n")
 	if data.DownloadURL != "" {
 		b.WriteString(fmt.Sprintf("[Download PDF](%s)\n\n", data.DownloadURL))
-		b.WriteString(fmt.Sprintf("```\n%s\n```\n", data.DownloadURL))
+		if year, ok := data.Metadata["year"].(string); ok && year != "" {
+			b.WriteString(fmt.Sprintf("- **Year:** %s\n", year))
+		}
+		if format, ok := data.Metadata["format"].(string); ok && format != "" {
+			b.WriteString(fmt.Sprintf("- **Format:** %s\n", format))
+		}
+		if size, ok := data.Metadata["size"].(string); ok && size != "" {
+			b.WriteString(fmt.Sprintf("- **Size:** %s\n", size))
+		}
+		b.WriteString(fmt.Sprintf("\n```\n%s\n```\n", data.DownloadURL))
 	} else {
 		b.WriteString("*Download link not available (try again or use --list-mirrors to see options)*\n")
 	}
 
 	return b.String()
+}
+
+// downloadFile downloads a file from URL to output path
+func downloadFile(ctx context.Context, s *AnnasArchiveDownloadSettings, url, title string) error {
+	fmt.Fprintf(os.Stderr, "Downloading: %s\n", url)
+
+	httpClient := &http.Client{Timeout: 300 * time.Second}
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %s", resp.Status)
+	}
+
+	// Determine output filename
+	outputPath := s.Output
+	if outputPath == "" {
+		if title != "" {
+			filename := sanitizeFilename(title) + ".pdf"
+			outputPath = filename
+		} else {
+			outputPath = "download.pdf"
+		}
+	}
+
+	// Ensure output path ends with .pdf
+	if !strings.HasSuffix(outputPath, ".pdf") {
+		outputPath = outputPath + ".pdf"
+	}
+
+	// Create output directory if needed
+	dir := filepath.Dir(outputPath)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
+	// Create output file
+	f, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer f.Close()
+
+	// Copy response body to file
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Saved to: %s\n", outputPath)
+	return nil
+}
+
+// sanitizeFilename makes a title safe for use as filename
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, "\x00", "")
+	name = strings.TrimSpace(name)
+	if len(name) > 200 {
+		name = name[:200]
+	}
+	return name
 }
