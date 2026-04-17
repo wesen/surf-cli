@@ -159,6 +159,40 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	}
 	rootCmd.AddCommand(cobraJS)
 
+	// Anna's Archive commands (parent + subcommands)
+	annasArchiveCmd, err := commands.NewAnnasArchiveCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraAnnasArchive, err := buildGlazedCommand(annasArchiveCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// annas-archive search
+	annasArchiveSearchCmd, err := commands.NewAnnasArchiveSearchCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraAnnasArchiveSearch, err := buildDualModeCommand(annasArchiveSearchCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	// annas-archive download
+	annasArchiveDownloadCmd, err := commands.NewAnnasArchiveDownloadCommand()
+	if err != nil {
+		return nil, err
+	}
+	cobraAnnasArchiveDownload, err := buildDualModeCommand(annasArchiveDownloadCmd)
+	if err != nil {
+		return nil, err
+	}
+
+	cobraAnnasArchive.AddCommand(cobraAnnasArchiveSearch)
+	cobraAnnasArchive.AddCommand(cobraAnnasArchiveDownload)
+	rootCmd.AddCommand(cobraAnnasArchive)
+
 	if err := addPageAndInputCommands(rootCmd); err != nil {
 		return nil, err
 	}
