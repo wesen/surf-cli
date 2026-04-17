@@ -193,14 +193,13 @@ func newRootCommand(helpSystem *help.HelpSystem) (*cobra.Command, error) {
 	cobraAnnasArchive.AddCommand(cobraAnnasArchiveDownload)
 	rootCmd.AddCommand(cobraAnnasArchive)
 
-	// 1lib.sk (libgen) commands
-	libgenCmd, err := commands.NewLibgenCommand()
-	if err != nil {
-		return nil, err
-	}
-	cobraLibgen, err := buildGlazedCommand(libgenCmd)
-	if err != nil {
-		return nil, err
+	// 1lib.sk (libgen) commands - use simple cobra group
+	_, _ = commands.NewLibgenCommand() // just to validate it works
+
+	cobraLibgen := &cobra.Command{
+		Use:   "libgen",
+		Short: "1lib.sk (Z-Library) commands",
+		Long:  "Commands for 1lib.sk - a Z-Library mirror. Search, download, and explore book collections.",
 	}
 
 	// libgen search

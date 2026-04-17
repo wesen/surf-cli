@@ -1,9 +1,6 @@
 package commands
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/go-go-golems/glazed/pkg/cli"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 )
@@ -28,9 +25,4 @@ func NewLibgenCommand() (*LibgenCommand, error) {
 	)
 
 	return &LibgenCommand{CommandDescription: desc}, nil
-}
-
-func (c *LibgenCommand) Run(_ interface{}, _ []string) error {
-	fmt.Fprintf(os.Stderr, "# 1lib.sk (Z-Library)\n\nUse `surf-go libgen search`, `libgen download`, `libgen suggestions`, `libgen collections`, or `libgen collection`\n")
-	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -249,29 +248,6 @@ func fetchLibgenCollections(ctx context.Context, s *LibgenCollectionsSettings) (
 	}
 	_, _ = ExecuteTool(ctx, client, "js", map[string]any{"code": `window.scrollTo(0, 0);`}, tabID, windowID)
 	time.Sleep(2 * time.Second)
-
-	// Debug: probe the page after clicking
-	probeResp, _ := ExecuteTool(ctx, client, "js", map[string]any{"code": `
-		var booklistLinks = document.querySelectorAll('a[href*="/booklist/"]').length;
-		// Check for any element containing "Related Booklists"
-		var relatedSection = null;
-		var allElements = document.querySelectorAll('*');
-		allElements.forEach(function(el) {
-			if (el.textContent === 'Related Booklists') {
-				relatedSection = el;
-			}
-		});
-		var relatedHTML = relatedSection ? relatedSection.outerHTML.substring(0, 1000) : 'NOT FOUND';
-		var relatedParent = relatedSection ? relatedSection.parentElement.outerHTML.substring(0, 2000) : 'NOT FOUND';
-		return { booklistLinks: booklistLinks, relatedHTML: relatedHTML, relatedParent: relatedParent };
-	`}, tabID, windowID)
-	if probeResp != nil {
-		parsed := parseResult(probeResp)
-		if data, ok := parsed.Data.(map[string]any); ok {
-			fmt.Fprintf(os.Stderr, "DEBUG: hasBooklist=%v booklistLinks=%v allLinks=%v\n", data["hasBooklist"], data["booklistLinks"], data["allLinks"])
-		}
-	}
-	time.Sleep(1 * time.Second)
 
 	resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": buildLibgenCollectionsCode()}, tabID, windowID)
 	if err != nil {

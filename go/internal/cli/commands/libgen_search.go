@@ -89,6 +89,9 @@ while ((match = numberPattern.exec(bodyText)) !== null && count < maxResults) {
   if (title.length < 5 || title.length > 300) continue;
   if (title.match(/^(Z-Library|Home|My Library|Donate|Log In|Search|General|Full-Text|Your gateway|Are you familiar)/)) continue;
   if (title.match(/^\d+\s*$/)) continue;
+  // Skip noise: email addresses, single words, short titles
+  if (title.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)) continue;
+  if (title.match(/^[a-zA-Z]+$/)) continue;
   if (title.match(/^(By signing|To build|Sign in|Blog|Official)/)) continue;
   
   // Skip if already seen
@@ -96,27 +99,35 @@ while ((match = numberPattern.exec(bodyText)) !== null && count < maxResults) {
   if (seen[titleKey]) continue;
   seen[titleKey] = true;
   
-  // Extract metadata from surrounding text
-  var startIdx = Math.max(0, match.index - 100);
-  var endIdx = Math.min(bodyText.length, match.index + 300);
+  // Extract metadata from surrounding text (look ahead to next few lines)
+  var startIdx = match.index;
+  var endIdx = Math.min(bodyText.length, match.index + 500);
   var metaText = bodyText.substring(startIdx, endIdx);
   
-  // Look for author
+  // Look for author (usually in "by Author" format after title)
   var author = '';
   var authorMatch = metaText.match(/by\s+([^\n,]+)/i);
   if (authorMatch) author = authorMatch[1].trim();
   
-  // Look for year, size, format
-  var yearMatch = metaText.match(/(\d{4})/);
-  var sizeMatch = metaText.match(/(\d+\.?\d*)\s*(MB|KB|GB)/i);
+  // Look for format, size, year - usually in same line or next few lines
+  // Format often appears as "PDF" or "EPUB" before size
   var formatMatch = metaText.match(/\b(PDF|EPUB|MOBI|AZW3|FB2|DOCX?)\b/i);
+  var sizeMatch = metaText.match(/(\d+\.?\d*)\s*(MB|KB|GB)/i);
+  var yearMatch = metaText.match(/\b(19\d{2}|20\d{2})\b/);
+  
+  // Build URL - prefer actual book link if found nearby
+  var url = 'https://1lib.sk/s/' + encodeURIComponent(title);
+  var bookLinkMatch = metaText.match(/\/book\/([a-zA-Z0-9]+)/);
+  if (bookLinkMatch) {
+    url = 'https://1lib.sk/book/' + bookLinkMatch[1];
+  }
   
   results.push({
     num: num,
     title: title,
     author: author,
-    url: 'https://1lib.sk/s/' + encodeURIComponent(title),
-    id: '',
+    url: url,
+    id: bookLinkMatch ? bookLinkMatch[1] : '',
     year: yearMatch ? yearMatch[1] : '',
     size: sizeMatch ? sizeMatch[0] : '',
     format: formatMatch ? formatMatch[0] : ''
@@ -297,21 +308,6 @@ func fetchLibgenSearch(ctx context.Context, s *LibgenSearchSettings) (*libgenSea
 	// Wait for page to load - longer for potential CloudFlare challenge
 	time.Sleep(8 * time.Second)
 
-	// Check if CloudFlare challenge is showing
-	cfResp, _ := ExecuteTool(ctx, client, "js", map[string]any{"code": `return { cfChallenge: !!document.querySelector('#challenge-form'), title: document.title, href: location.href, bodyText: document.body.innerText.substring(0, 500) };`}, tabID, windowID)
-	if cfResp != nil {
-		parsed := parseResult(cfResp)
-		if data, ok := parsed.Data.(map[string]any); ok {
-			fmt.Fprintf(os.Stderr, "DEBUG: Page status - title: %v, href: %v, cfChallenge: %v\n", data["title"], data["href"], data["cfChallenge"])
-			if text, ok := data["bodyText"].(string); ok {
-				if len(text) > 200 {
-					text = text[:200]
-				}
-				fmt.Fprintf(os.Stderr, "Body: %s\n", text)
-			}
-		}
-	}
-
 	// Scroll to trigger lazy loading and wait for results
 	for i := 0; i < 10; i++ {
 		// Scroll down to trigger lazy loading
@@ -319,31 +315,22 @@ func fetchLibgenSearch(ctx context.Context, s *LibgenSearchSettings) (*libgenSea
 		time.Sleep(2 * time.Second)
 
 		// Check if results are visible
-		resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": `return { bookLinks: document.querySelectorAll('a[href*="/book/"]').length, resItems: document.querySelectorAll('.res-item').length, tableRows: document.querySelectorAll('table tbody tr').length };`}, tabID, windowID)
+		resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": `return { bookLinks: document.querySelectorAll('a[href*="/book/"]').length, resItems: document.querySelectorAll('.res-item').length };`}, tabID, windowID)
 		if err == nil {
 			parsed := parseResult(resp)
 			if data, ok := parsed.Data.(map[string]any); ok {
 				if bookLinks, ok := data["bookLinks"].(float64); ok && bookLinks > 0 {
-					fmt.Fprintf(os.Stderr, "DEBUG: Found %d book links after scroll\n", int(bookLinks))
+					if s.DebugSocket {
+						fmt.Fprintf(os.Stderr, "DEBUG: Found %d book links after scroll\n", int(bookLinks))
+					}
 					break
 				}
 				if resItems, ok := data["resItems"].(float64); ok && resItems > 0 {
-					fmt.Fprintf(os.Stderr, "DEBUG: Found %d res-items after scroll\n", int(resItems))
+					if s.DebugSocket {
+						fmt.Fprintf(os.Stderr, "DEBUG: Found %d res-items after scroll\n", int(resItems))
+					}
 					break
 				}
-			}
-		}
-	}
-
-	// Also check page body for results text
-	pageInfo, _ := ExecuteTool(ctx, client, "js", map[string]any{"code": `var body = document.body.innerText; var hasResults = body.includes('On your request nothing has been found'); return { hasNoResults: hasResults, bodyLength: body.length };`}, tabID, windowID)
-	if pageInfo != nil {
-		parsed := parseResult(pageInfo)
-		if data, ok := parsed.Data.(map[string]any); ok {
-			if noResults, ok := data["hasNoResults"].(bool); ok && noResults {
-				fmt.Fprintf(os.Stderr, "DEBUG: No results found on page\n")
-			} else {
-				fmt.Fprintf(os.Stderr, "DEBUG: Page has results (body length: %v)\n", data["bodyLength"])
 			}
 		}
 	}
