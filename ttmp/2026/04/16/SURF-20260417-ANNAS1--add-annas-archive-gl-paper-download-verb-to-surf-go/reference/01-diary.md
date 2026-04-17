@@ -210,3 +210,57 @@ Also, IIFEs don't work:
 ```js
 (function() { return {test: true}; })();  // returns undefined
 ```
+
+---
+
+## Step 4: Refinement - Separate Commands and Mirror Selection
+
+### What I did
+- Split single command into subcommand structure:
+  - `surf-go annas-archive search` - Search for papers
+  - `surf-go annas-archive download` - Get download with mirror selection
+- Implemented `--list-mirrors` and `--mirror fast|slow --mirror-index N` flags
+- Fixed download polling loop to handle wait cycles properly
+
+### Working features
+```bash
+# List available mirrors
+surf-go annas-archive download --doi 10.1038/nature12373 --list-mirrors
+
+# Download with specific mirror
+surf-go annas-archive download --doi 10.1038/nature12373 --mirror slow --mirror-index 0
+```
+
+### Mirror types
+- **Fast mirrors:** 12 servers (0-11), servers 0-5 marked "recommended"
+- **Slow mirrors:** 8 servers (0-7), no membership required
+- Default: random slow mirror
+
+### Download wait handling
+The download page shows "Please wait" before the PDF link appears. JS code:
+1. Checks page state (waiting vs download_page vs found)
+2. Polls every 3 seconds
+3. Up to 120 second timeout
+4. Returns download URL when found
+
+### Key fix: removing emoji check
+Emoji literal (`📚`) caused Go string parsing issues. Removed:
+```js
+// Removed: text.includes('📚')
+// Keep: text.toLowerCase().includes('download')
+```
+
+### Files modified/created
+- `go/internal/cli/commands/annas_archive.go` - Parent command (subcommand structure)
+- `go/internal/cli/commands/annas_archive_search.go` - Search subcommand
+- `go/internal/cli/commands/annas_archive_download.go` - Download subcommand (refactored)
+
+### Commit
+```
+feat: add annas-archive command with search and download subcommands
+```
+
+### Remaining work
+- Add paper title/metadata to download output
+- Add actual PDF download option (fetch URL and save to file)
+- Add `--output FILE` flag for direct file save
