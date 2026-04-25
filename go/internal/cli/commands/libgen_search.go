@@ -27,14 +27,14 @@ var _ cmds.GlazeCommand = (*LibgenSearchCommand)(nil)
 var _ cmds.WriterCommand = (*LibgenSearchCommand)(nil)
 
 type LibgenSearchSettings struct {
-	Query        string `glazed:"query"`
-	Limit        int    `glazed:"limit"`
-	KeepTabOpen  bool   `glazed:"keep-tab-open"`
-	Socket       string `glazed:"socket-path"`
-	TimeoutMS    int    `glazed:"timeout-ms"`
-	TabID        int64  `glazed:"tab-id"`
-	WindowID     int64  `glazed:"window-id"`
-	DebugSocket  bool   `glazed:"debug-socket"`
+	Query       string `glazed:"query"`
+	Limit       int    `glazed:"limit"`
+	KeepTabOpen bool   `glazed:"keep-tab-open"`
+	Socket      string `glazed:"socket-path"`
+	TimeoutMS   int    `glazed:"timeout-ms"`
+	TabID       int64  `glazed:"tab-id"`
+	WindowID    int64  `glazed:"window-id"`
+	DebugSocket bool   `glazed:"debug-socket"`
 }
 
 func NewLibgenSearchCommand() (*LibgenSearchCommand, error) {
@@ -67,152 +67,64 @@ func NewLibgenSearchCommand() (*LibgenSearchCommand, error) {
 	return &LibgenSearchCommand{CommandDescription: desc}, nil
 }
 
-func buildLibgenSearchCode() string {
-	return `
-var results = [];
-var maxResults = 50;
-var seen = {};
+func buildLibgenSearchCode(limit int) string {
+	return fmt.Sprintf(`var results = [];
+var maxResults = %d;
 
-// Parse titles from body text - the search results are numbered
-var bodyText = document.body.innerText;
+var cards = document.querySelectorAll('z-bookcard.ready');
 
-// Pattern: look for numbered entries followed by titles
-// The page shows "1\nTitle" format
-var numberPattern = /(\d+)\s*\n([^\n]{5,300})/g;
-var match;
-var count = 0;
-while ((match = numberPattern.exec(bodyText)) !== null && count < maxResults) {
-  var num = parseInt(match[1]);
-  var title = match[2].trim();
-  
-  // Skip headers, footers, and navigation
-  if (title.length < 5 || title.length > 300) continue;
-  if (title.match(/^(Z-Library|Home|My Library|Donate|Log In|Search|General|Full-Text|Your gateway|Are you familiar)/)) continue;
-  if (title.match(/^\d+\s*$/)) continue;
-  // Skip noise: email addresses, single words, short titles
-  if (title.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)) continue;
-  if (title.match(/^[a-zA-Z]+$/)) continue;
-  if (title.match(/^(By signing|To build|Sign in|Blog|Official)/)) continue;
-  
-  // Skip if already seen
-  var titleKey = title.toLowerCase().substring(0, 50);
-  if (seen[titleKey]) continue;
-  seen[titleKey] = true;
-  
-  // Extract metadata from surrounding text (look ahead to next few lines)
-  var startIdx = match.index;
-  var endIdx = Math.min(bodyText.length, match.index + 500);
-  var metaText = bodyText.substring(startIdx, endIdx);
-  
-  // Look for author (usually in "by Author" format after title)
-  var author = '';
-  var authorMatch = metaText.match(/by\s+([^\n,]+)/i);
-  if (authorMatch) author = authorMatch[1].trim();
-  
-  // Look for format, size, year - usually in same line or next few lines
-  // Format often appears as "PDF" or "EPUB" before size
-  var formatMatch = metaText.match(/\b(PDF|EPUB|MOBI|AZW3|FB2|DOCX?)\b/i);
-  var sizeMatch = metaText.match(/(\d+\.?\d*)\s*(MB|KB|GB)/i);
-  var yearMatch = metaText.match(/\b(19\d{2}|20\d{2})\b/);
-  
-  // Build URL - prefer actual book link if found nearby
-  var url = 'https://1lib.sk/s/' + encodeURIComponent(title);
-  var bookLinkMatch = metaText.match(/\/book\/([a-zA-Z0-9]+)/);
-  if (bookLinkMatch) {
-    url = 'https://1lib.sk/book/' + bookLinkMatch[1];
+cards.forEach(function(card) {
+  if (results.length >= maxResults) return;
+
+  var href = card.getAttribute('href') || '';
+  var numericId = card.getAttribute('id') || '';
+
+  // Extract the hash ID from the URL (e.g., oOY31bWjPK from /book/oOY31bWjPK/...)
+  var urlIdMatch = href.match(/\/book\/([^\/]+)/);
+  var urlId = urlIdMatch ? urlIdMatch[1] : '';
+
+  // Title and author from light DOM slots (most reliable)
+  var titleSlot = card.querySelector('[slot="title"]');
+  var authorSlot = card.querySelector('[slot="author"]');
+  var title = titleSlot ? titleSlot.textContent.trim() : '';
+  var author = authorSlot ? authorSlot.textContent.trim() : '';
+
+  // Fallback to z-cover attributes inside shadow DOM
+  if (!title) {
+    var shadow = card.shadowRoot;
+    if (shadow) {
+      var cover = shadow.querySelector('z-cover');
+      if (cover) {
+        title = cover.getAttribute('title') || '';
+        author = cover.getAttribute('author') || '';
+      }
+    }
   }
-  
+
+  var url = href.startsWith('http') ? href : 'https://1lib.sk' + href;
+  var downloadPath = card.getAttribute('download') || '';
+  var downloadUrl = downloadPath ? ('https://1lib.sk' + downloadPath) : '';
+
   results.push({
-    num: num,
     title: title,
     author: author,
     url: url,
-    id: bookLinkMatch ? bookLinkMatch[1] : '',
-    year: yearMatch ? yearMatch[1] : '',
-    size: sizeMatch ? sizeMatch[0] : '',
-    format: formatMatch ? formatMatch[0] : ''
-  });
-  count++;
-}
-
-// Also look for book items with known selectors
-var resItems = document.querySelectorAll('.res-item');
-resItems.forEach(function(item) {
-  if (results.length >= maxResults) return;
-  
-  var link = item.querySelector('a[href*="/book/"]');
-  if (!link) return;
-  
-  var href = link.getAttribute('href');
-  var idMatch = href.match(/\/book\/([^\/]+)/);
-  var id = idMatch ? idMatch[1] : '';
-  
-  var title = link.textContent.trim() || link.querySelector('span')?.textContent?.trim() || '';
-  if (!title) {
-    var h3 = item.querySelector('h3');
-    if (h3) title = h3.textContent.trim();
-  }
-  
-  if (!title || title.length < 3) return;
-  
-  var titleKey = title.toLowerCase().substring(0, 50);
-  if (seen[titleKey]) return;
-  seen[titleKey] = true;
-  
-  var authorLink = item.querySelector('a[href*="/author/"]');
-  var author = authorLink ? authorLink.textContent.trim() : '';
-  
-  var metaDiv = item.querySelector('.res-add') || item.querySelector('.bookMeta');
-  var meta = metaDiv ? metaDiv.textContent : '';
-  var yearMatch = meta.match(/(\d{4})/);
-  var sizeMatch = meta.match(/(\d+\.?\d*)\s*(MB|KB|GB)/i);
-  var formatMatch = meta.match(/\b(PDF|EPUB|MOBI|AZW3|FB2|DOCX?)\b/i);
-  
-  results.push({
-    title: title,
-    author: author,
-    url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
-    id: id,
-    year: yearMatch ? yearMatch[1] : '',
-    size: sizeMatch ? sizeMatch[0] : '',
-    format: formatMatch ? formatMatch[0] : ''
+    id: urlId,
+    numericId: numericId,
+    downloadUrl: downloadUrl,
+    year: card.getAttribute('year') || '',
+    format: (card.getAttribute('extension') || '').toUpperCase(),
+    size: card.getAttribute('filesize') || '',
+    publisher: card.getAttribute('publisher') || '',
+    language: card.getAttribute('language') || ''
   });
 });
-
-// Look for any book links
-if (results.length === 0) {
-  var links = document.querySelectorAll('a[href*="/book/"]');
-  links.forEach(function(link) {
-    if (results.length >= maxResults) return;
-    
-    var href = link.getAttribute('href');
-    var idMatch = href.match(/\/book\/([^\/]+)/);
-    var id = idMatch ? idMatch[1] : '';
-    
-    var title = link.textContent.trim();
-    var titleSpan = link.querySelector('span');
-    if (titleSpan) {
-      var spanText = titleSpan.textContent.trim();
-      if (spanText) title = spanText;
-    }
-    
-    if (!title || title.length < 5 || title.length > 400) return;
-    if (title.match(/^(Log In|Home|Library|Donate|Search|Z-Library|\+[\d]+|Results?|Most Popular|Booklists?)/)) return;
-    
-    results.push({
-      title: title,
-      author: '',
-      url: href.startsWith('http') ? href : 'https://1lib.sk' + href,
-      id: id
-    });
-  });
-}
 
 return {
   count: results.length,
   results: results
 };
-`
+`, limit)
 }
 
 func (c *LibgenSearchCommand) RunIntoGlazeProcessor(
@@ -305,37 +217,24 @@ func fetchLibgenSearch(ctx context.Context, s *LibgenSearchSettings) (*libgenSea
 		}
 	}()
 
-	// Wait for page to load - longer for potential CloudFlare challenge
-	time.Sleep(8 * time.Second)
-
-	// Scroll to trigger lazy loading and wait for results
-	for i := 0; i < 10; i++ {
-		// Scroll down to trigger lazy loading
-		_, _ = ExecuteTool(ctx, client, "js", map[string]any{"code": `window.scrollTo(0, document.body.scrollHeight); window.scrollTo(0, document.body.scrollHeight / 2); return document.body.scrollHeight;`}, tabID, windowID)
-		time.Sleep(2 * time.Second)
-
-		// Check if results are visible
-		resp, err := ExecuteTool(ctx, client, "js", map[string]any{"code": `return { bookLinks: document.querySelectorAll('a[href*="/book/"]').length, resItems: document.querySelectorAll('.res-item').length };`}, tabID, windowID)
-		if err == nil {
-			parsed := parseResult(resp)
-			if data, ok := parsed.Data.(map[string]any); ok {
-				if bookLinks, ok := data["bookLinks"].(float64); ok && bookLinks > 0 {
-					if s.DebugSocket {
-						fmt.Fprintf(os.Stderr, "DEBUG: Found %d book links after scroll\n", int(bookLinks))
-					}
-					break
+	// Wait for z-bookcard custom elements to hydrate (they render via shadow DOM)
+	// Poll briefly for z-bookcard.ready to appear
+	cardReadyDeadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(cardReadyDeadline) {
+		probeResp, probeErr := ExecuteTool(ctx, client, "js", map[string]any{"code": `return document.querySelectorAll('z-bookcard.ready').length;`}, tabID, windowID)
+		if probeErr == nil {
+			parsed := parseResult(probeResp)
+			if count, ok := parsed.Data.(float64); ok && count > 0 {
+				if s.DebugSocket {
+					fmt.Fprintf(os.Stderr, "DEBUG: Found %d z-bookcard.ready elements\n", int(count))
 				}
-				if resItems, ok := data["resItems"].(float64); ok && resItems > 0 {
-					if s.DebugSocket {
-						fmt.Fprintf(os.Stderr, "DEBUG: Found %d res-items after scroll\n", int(resItems))
-					}
-					break
-				}
+				break
 			}
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
-	finalResp, finalErr := ExecuteTool(ctx, client, "js", map[string]any{"code": buildLibgenSearchCode()}, tabID, windowID)
+	finalResp, finalErr := ExecuteTool(ctx, client, "js", map[string]any{"code": buildLibgenSearchCode(s.Limit)}, tabID, windowID)
 	if finalErr != nil {
 		return nil, finalErr
 	}
@@ -349,13 +248,17 @@ type libgenSearchData struct {
 }
 
 type libgenBookResult struct {
-	Title  string
-	Author string
-	URL    string
-	ID     string
-	Year   string
-	Size   string
-	Format string
+	Title       string
+	Author      string
+	URL         string
+	ID          string
+	NumericID   string
+	DownloadURL string
+	Year        string
+	Size        string
+	Format      string
+	Publisher   string
+	Language    string
 }
 
 func parseLibgenSearchResponse(resp map[string]any) *libgenSearchData {
@@ -386,6 +289,12 @@ func parseLibgenSearchResponse(resp map[string]any) *libgenSearchData {
 					if id, ok := rm["id"].(string); ok {
 						book.ID = id
 					}
+					if numericId, ok := rm["numericId"].(string); ok {
+						book.NumericID = numericId
+					}
+					if downloadUrl, ok := rm["downloadUrl"].(string); ok {
+						book.DownloadURL = downloadUrl
+					}
 					if year, ok := rm["year"].(string); ok {
 						book.Year = year
 					}
@@ -394,6 +303,12 @@ func parseLibgenSearchResponse(resp map[string]any) *libgenSearchData {
 					}
 					if format, ok := rm["format"].(string); ok {
 						book.Format = format
+					}
+					if publisher, ok := rm["publisher"].(string); ok {
+						book.Publisher = publisher
+					}
+					if language, ok := rm["language"].(string); ok {
+						book.Language = language
 					}
 					result.Results = append(result.Results, book)
 				}
@@ -407,13 +322,17 @@ func libgenSearchToRows(data *libgenSearchData) []types.Row {
 	rows := []types.Row{}
 	for _, r := range data.Results {
 		row := map[string]any{
-			"title":  r.Title,
-			"author": r.Author,
-			"url":    r.URL,
-			"id":     r.ID,
-			"year":   r.Year,
-			"size":   r.Size,
-			"format": r.Format,
+			"title":        r.Title,
+			"author":       r.Author,
+			"url":          r.URL,
+			"id":           r.ID,
+			"numeric-id":   r.NumericID,
+			"download-url": r.DownloadURL,
+			"year":         r.Year,
+			"size":         r.Size,
+			"format":       r.Format,
+			"publisher":    r.Publisher,
+			"language":     r.Language,
 		}
 		rows = append(rows, types.NewRowFromMap(row))
 	}
@@ -434,6 +353,9 @@ func renderLibgenSearchMarkdown(data *libgenSearchData) string {
 			b.WriteString(fmt.Sprintf("**Author:** %s\n\n", r.Author))
 		}
 		b.WriteString(fmt.Sprintf("- [View on 1lib.sk](%s)\n", r.URL))
+		if r.ID != "" {
+			b.WriteString(fmt.Sprintf("- **ID:** `%s`\n", r.ID))
+		}
 		if r.Year != "" {
 			b.WriteString(fmt.Sprintf("- **Year:** %s\n", r.Year))
 		}
@@ -443,9 +365,13 @@ func renderLibgenSearchMarkdown(data *libgenSearchData) string {
 		if r.Size != "" {
 			b.WriteString(fmt.Sprintf("- **Size:** %s\n", r.Size))
 		}
-		if r.ID != "" {
-			b.WriteString(fmt.Sprintf("- **ID:** `%s`\n\n", r.ID))
+		if r.Publisher != "" {
+			b.WriteString(fmt.Sprintf("- **Publisher:** %s\n", r.Publisher))
 		}
+		if r.Language != "" {
+			b.WriteString(fmt.Sprintf("- **Language:** %s\n", r.Language))
+		}
+		b.WriteString("\n")
 	}
 
 	return b.String()

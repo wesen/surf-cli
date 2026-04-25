@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Book Page - Z-Library</title>
+  <style>
+    .hidden-login { display: none; }
+    .book-page { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .download-btn { background: #28a745; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="book-page">
+    <h1>Test Book Title</h1>
+    <p><strong>Author:</strong> Test Author</p>
+    <p><strong>Year:</strong> 2024</p>
+    <p><strong>File:</strong> PDF, 5.2 MB</p>
+    
+    <!-- Visible download button -->
+    <a href="/dl/12345" class="download-btn">Download (PDF, 5.2 MB)</a>
+    
+    <!-- Hidden login link that exists in DOM when user IS logged in -->
+    <!-- 1lib.sk may keep this in the DOM but hide it for logged-in users -->
+    <a href="/login?redirectUrl=/book/12345" data-mode="singlelogin" data-action="login" class="hidden-login" id="hidden-login-link">Log In</a>
+    
+    <!-- Also simulate a case where it's hidden via visibility:hidden -->
+    <a href="/login" data-mode="singlelogin" style="visibility:hidden;position:absolute;left:-9999px;">Log In 2</a>
+  </div>
+</body>
+</html>
